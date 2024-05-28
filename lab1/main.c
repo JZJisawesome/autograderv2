@@ -1,13 +1,38 @@
 /**
  * @file    main.c
- * @brief   Testcase for ECE 350, Lab 1
+ * @brief   Autograder for ECE 350, Lab 1
  * 
  * @copyright Copyright (C) 2024 John Jekel and contributors
  * See the LICENSE file at the root of the project for licensing info.
  * 
- * Replace your `main.cpp` file with this and you're off to the races!
+ * Replace your `main.c` file with this and you're off to the races!
  *
 */
+
+/* ------------------------------------------------------------------------------------------------
+ * Constants/Defines
+ * --------------------------------------------------------------------------------------------- */
+
+#define NUM_TEST_FUNCTIONS 5
+
+//X macros are magical! :)
+//Order: function name, stack size
+#define TEST_FUNCTIONS \
+    X(sanity,                       STACK_SIZE) \
+    X(stack_reuse,                  STACK_SIZE) \
+    X(say_hello,                    STACK_SIZE) \
+    X(insanity,                     0x400) \
+    X(task_wrapper_test,            STACK_SIZE)
+//TODO more
+
+#define NUM_PRIVILEGED_TESTS 5
+
+#define INSANITY_LEVEL 50
+
+//Making it to the manager is also a point!
+#define NUM_TESTS (NUM_TEST_FUNCTIONS + NUM_PRIVILEGED_TESTS + 1)
+
+#define FN_MANAGER_STACK_SIZE 0x400
 
 /* ------------------------------------------------------------------------------------------------
  * Includes
@@ -18,7 +43,7 @@
 #include "k_mem.h"
 #include "k_task.h"
 
-//These are headers that this testcase needs
+//These are headers that the autograder needs
 #include <assert.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -26,30 +51,6 @@
 #include <stddef.h>
 #include <string.h>
 #include "main.h"
-
-/* ------------------------------------------------------------------------------------------------
- * Constants/Defines
- * --------------------------------------------------------------------------------------------- */
-
-#define NUM_TEST_FUNCTIONS 4
-
-#define FN_MANAGER_STACK_SIZE 0x400
-
-//X macros are magical! :)
-//Order: function name, argument, stack size
-#define TEST_FUNCTIONS \
-    X(sanity,                       STACK_SIZE) \
-    X(stack_reuse,                  STACK_SIZE) \
-    X(say_hello,                    STACK_SIZE) \
-    X(insanity,                     0x400)
-//TODO more
-
-#define NUM_PRIVILEGED_TESTS 2
-
-//Making it to the manager is also a point!
-#define NUM_TESTS (NUM_TEST_FUNCTIONS + NUM_PRIVILEGED_TESTS + 1)
-
-#define INSANITY_LEVEL 20
 
 /* ------------------------------------------------------------------------------------------------
  * Type Declarations
@@ -125,6 +126,7 @@ int main(void) {
     printf("code, which can be a great way to guage your progress in and of itself!\r\n");
     printf("Cheers and best of luck. Let's get into it! - \x1b[95mJZJ\x1b[0m\r\n\r\n");
 
+    //Getting into it...
     printf("\x1b[1mInitializing the kernel and doing some pre-osKernelStart() tests...\x1b[0m\r\n");
 
     int result = osTaskExit();
@@ -142,20 +144,44 @@ int main(void) {
         printf("\x1b[1m\x1b[92mNice work on the pre-init osKernelStart() behavior!\x1b[0m\r\n");
         ++num_passed;
     }
+
+    if (osTaskExit() != RTX_ERR) {
+        printf("\x1b[1m\x1b[91mosTaskExit() should return RTX_ERR when called from a privileged context!\x1b[0m\r\n");
+    } else {
+        printf("\x1b[1m\x1b[92mGood pre-osKernelStart() osTaskExit() behavior!\x1b[0m\r\n");
+        ++num_passed;
+    }
     
     //TODO more tests pre-init
 
     osKernelInit();
     printf("\x1b[1mAlrighty, the kernel is initialized! Let's see how you're doing so far...\x1b[0m\r\n");
     print_score_so_far();
-
+    
     //TODO more tests post-init
+
+    if (getTID() != 0) {
+        printf("\x1b[1m\x1b[91mgetTID() should return 0 when called from a privileged context!\x1b[0m\r\n");
+    } else {
+        printf("\x1b[1m\x1b[92mGood pre-start getTID() behaviour!\x1b[0m\r\n");
+        ++num_passed;
+    }
 
     TCB task;
     memset(&task, 0, sizeof(TCB));
     task.ptask      = test_function_manager;
     task.stack_size = FN_MANAGER_STACK_SIZE;
-    osCreateTask(&task);
+    result = osCreateTask(&task);
+    if (result == RTX_ERR) {
+        printf("\x1b[1m\x1b[91mosCreateTask() failed to create the test function manager task!\x1b[0m\r\n");
+        printf("\x1b[1mSadly this means we can't really continue, but don't give up! :)\x1b[0m\r\n");
+        while(true);
+    } else if (task.tid == 0) {
+        printf("\x1b[1m\x1b[91mosCreateTask() succeeded but didn't set TID in the task it was passed!\x1b[0m\r\n");
+    } else {
+        printf("\x1b[1m\x1b[92mSuccessfully created the test function manager task!\x1b[0m\r\n");
+        ++num_passed;
+    }
 
     //And off we go!
     printf("\r\n\x1b[1mOkay, I'm calling osKernelStart() now. This is a big step, don't get disheartened\r\n");
@@ -214,14 +240,14 @@ static void test_function_manager(void*) {
         if (function_status) {
             printf(
                 "\x1b[1m\x1b[92mTest function \x1b[96m#%u\x1b[92m, \x1b[96m%s()\x1b[92m, passed!\x1b[0m\r\n",
-                ii,
+                ii + 1,
                 test_functions[ii].name
             );
             ++num_passed;
         } else {
             printf(
                 "\x1b[1m\x1b[91mTest function \x1b[96m#%u\x1b[91m, \x1b[96m%s()\x1b[91m, failed!\x1b[0m\r\n",
-                ii,
+                ii + 1,
                 test_functions[ii].name
             );
         }
@@ -252,6 +278,7 @@ static void sanity(void*) {
     //Do nothing!
     function_complete = true;
     function_status = true;
+    osTaskExit();
 }
 
 static void stack_reuse(void*) {
@@ -259,6 +286,7 @@ static void stack_reuse(void*) {
     //We can't really check this but at least it shouldn't crash :)
     function_complete = true;
     function_status = true;
+    osTaskExit();
 }
 
 static void say_hello(void*) {
@@ -268,11 +296,13 @@ static void say_hello(void*) {
     printf("Hello World!\r\n");
     function_complete = true;
     function_status = true;
+    osTaskExit();
 }
 
 static void insanity_helper(void*) {
     printf("Hello there from TID %u!\r\n", getTID());
     ++insanity_counter;
+    osTaskExit();
 }
 
 static void insanity(void*) {
@@ -297,4 +327,11 @@ static void insanity(void*) {
     printf("And goodbye!\r\n");
     function_complete = true;
     function_status = true;
+    osTaskExit();
+}
+
+static void task_wrapper_test(void*) {
+    function_complete = true;
+    function_status = true;
+    //NOT calling osTaskExit(). Your code should handle this.
 }
