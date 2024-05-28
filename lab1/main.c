@@ -25,7 +25,7 @@
     X(task_wrapper_test,            STACK_SIZE)
 //TODO more
 
-#define NUM_PRIVILEGED_TESTS 5
+#define NUM_PRIVILEGED_TESTS 13
 
 #define INSANITY_LEVEL 50
 
@@ -129,37 +129,31 @@ int main(void) {
     //Getting into it...
     printf("\x1b[1mInitializing the kernel and doing some pre-osKernelStart() tests...\x1b[0m\r\n");
 
-    int result = osTaskExit();
-    if (result != RTX_ERR) {
+    //Privileged test #1
+    if (osTaskExit() != RTX_ERR) {
         printf("\x1b[1m\x1b[91mosTaskExit() should return RTX_ERR when called from a privileged context!\x1b[0m\r\n");
     } else {
         printf("\x1b[1m\x1b[92mAwesome, you passed the first osTaskExit() test!\x1b[0m\r\n");
         ++num_passed;
     }
 
-    osKernelStart();
-    if (result != RTX_ERR) {
+    //Privileged test #2
+    if (osKernelStart() != RTX_ERR) {
         printf("\x1b[1m\x1b[91mosKernelStart() should return RTX_ERR when called before the kernel was initialized!\x1b[0m\r\n");
     } else {
         printf("\x1b[1m\x1b[92mNice work on the pre-init osKernelStart() behavior!\x1b[0m\r\n");
         ++num_passed;
     }
 
+    //Privileged test #3
     if (osTaskExit() != RTX_ERR) {
         printf("\x1b[1m\x1b[91mosTaskExit() should return RTX_ERR when called from a privileged context!\x1b[0m\r\n");
     } else {
         printf("\x1b[1m\x1b[92mGood pre-osKernelStart() osTaskExit() behavior!\x1b[0m\r\n");
         ++num_passed;
     }
-    
-    //TODO more tests pre-init
 
-    osKernelInit();
-    printf("\x1b[1mAlrighty, the kernel is initialized! Let's see how you're doing so far...\x1b[0m\r\n");
-    print_score_so_far();
-    
-    //TODO more tests post-init
-
+    //Privileged test #4
     if (getTID() != 0) {
         printf("\x1b[1m\x1b[91mgetTID() should return 0 when called from a privileged context!\x1b[0m\r\n");
     } else {
@@ -167,19 +161,141 @@ int main(void) {
         ++num_passed;
     }
 
-    TCB task;
-    memset(&task, 0, sizeof(TCB));
-    task.ptask      = test_function_manager;
-    task.stack_size = FN_MANAGER_STACK_SIZE;
-    result = osCreateTask(&task);
-    if (result == RTX_ERR) {
+    //Privileged test #5
+    osYield();
+    ++num_passed;
+    printf("\x1b[1m\x1b[92mYou survived an osYield before the kernel started!\x1b[0m\r\n");
+
+    //Privileged test #6
+    bool task_info_passed = true;
+    for (int ii = 0; ii < MAX_TASKS; ++ii) {
+        TCB task_info;
+        memset(&task_info, 0, sizeof(TCB));
+        if (osTaskInfo((task_t)ii, &task_info) != RTX_ERR) {
+            printf("\x1b[1m\x1b[91mosTaskInfo() should return RTX_ERR since no tasks exist yet!\x1b[0m\r\n");
+            task_info_passed = false;
+            break;
+        }
+
+        TCB zeroed_task_info;
+        memset(&task_info, 0, sizeof(TCB));
+        if (memcmp(&task_info, &zeroed_task_info, sizeof(TCB)) != 0) {
+            printf("\x1b[1m\x1b[91mosTaskInfo() should not modify the task_info struct when it fails!\x1b[0m\r\n");
+            task_info_passed = false;
+            break;
+        }
+    }
+    if (task_info_passed) {
+        printf("\x1b[1m\x1b[92mosTaskInfo() is behaving as expected before the kernel starts!\x1b[0m\r\n");
+        ++num_passed;
+    }
+    
+    //TODO more tests pre-init
+
+    //Privileged test #7
+    printf("\x1b[1mInitializing the kernel...\x1b[0m\r\n");
+    osKernelInit();
+    ++num_passed;
+    printf("\x1b[1m\x1b[92mAlrighty, the kernel is initialized!\x1b[0m\x1b[1m Let's see how you're doing so far...\x1b[0m\r\n");
+    print_score_so_far();
+    
+    //Privileged test #8
+    if (getTID() != 0) {
+        printf("\x1b[1m\x1b[91mgetTID() should return 0 when called from a privileged context!\x1b[0m\r\n");
+    } else {
+        printf("\x1b[1m\x1b[92mgetTID() still behaving as expected after init!\x1b[0m\r\n");
+        ++num_passed;
+    }
+
+    //Privileged test #9
+    if (osTaskExit() != RTX_ERR) {
+        printf("\x1b[1m\x1b[91mosTaskExit() should return RTX_ERR when called from a privileged context!\x1b[0m\r\n");
+    } else {
+        printf("\x1b[1m\x1b[92mosTaskExit() still behaving as expected after init!\x1b[0m\r\n");
+        ++num_passed;
+    }
+
+    //Privileged test #10
+    osYield();
+    ++num_passed;
+    printf("\x1b[1m\x1b[92mYou survived ANOTHER osYield before the kernel started!\x1b[0m\r\n");
+
+    //Privileged test #11
+    task_info_passed = true;
+    for (task_t ii = 0; ii < MAX_TASKS; ++ii) {
+        TCB task_info;
+        memset(&task_info, 0, sizeof(TCB));
+        if (osTaskInfo(ii, &task_info) != RTX_ERR) {
+            printf("\x1b[1m\x1b[91mosTaskInfo() should return RTX_ERR since no tasks exist yet!\x1b[0m\r\n");
+            task_info_passed = false;
+            break;
+        }
+
+        TCB zeroed_task_info;
+        memset(&task_info, 0, sizeof(TCB));
+        if (memcmp(&task_info, &zeroed_task_info, sizeof(TCB)) != 0) {
+            printf("\x1b[1m\x1b[91mosTaskInfo() should not modify the task_info struct when it fails!\x1b[0m\r\n");
+            task_info_passed = false;
+            break;
+        }
+    }
+    if (task_info_passed) {
+        printf("\x1b[1m\x1b[92mosTaskInfo() is behaving as expected before the kernel starts!\x1b[0m\r\n");
+        ++num_passed;
+    }
+
+    //Privileged test #12
+    TCB test_function_manager_task;
+    memset(&test_function_manager_task, 0, sizeof(TCB));
+    test_function_manager_task.ptask      = test_function_manager;
+    test_function_manager_task.stack_size = FN_MANAGER_STACK_SIZE;
+    if (osCreateTask(&test_function_manager_task) == RTX_ERR) {
         printf("\x1b[1m\x1b[91mosCreateTask() failed to create the test function manager task!\x1b[0m\r\n");
         printf("\x1b[1mSadly this means we can't really continue, but don't give up! :)\x1b[0m\r\n");
         while(true);
-    } else if (task.tid == 0) {
+    } else if (test_function_manager_task.tid == 0) {
         printf("\x1b[1m\x1b[91mosCreateTask() succeeded but didn't set TID in the task it was passed!\x1b[0m\r\n");
     } else {
         printf("\x1b[1m\x1b[92mSuccessfully created the test function manager task!\x1b[0m\r\n");
+        ++num_passed;
+    }
+
+    //Privileged test #13
+    task_info_passed = true;
+    for (task_t ii = 0; ii < MAX_TASKS; ++ii) {
+        TCB task_info;
+        memset(&task_info, 0, sizeof(TCB));
+        if (osTaskInfo(ii, &task_info) != RTX_ERR) {
+            if (ii == test_function_manager_task.tid) {//The task we created
+                if (task_info.ptask != test_function_manager) {
+                    printf("\x1b[1m\x1b[91mosTaskInfo() reporting incorrect ptask, or bad TCB initialization!\x1b[0m\r\n");
+                    task_info_passed = false;
+                    break;
+                }
+
+                if (task_info.stack_size != FN_MANAGER_STACK_SIZE) {
+                    printf("\x1b[1m\x1b[91mosTaskInfo() reporting incorrect stack size, or bad TCB initialization!\x1b[0m\r\n");
+                    task_info_passed = false;
+                    break;
+                }
+
+                continue;
+            }
+            printf("\x1b[1m\x1b[91mosTaskInfo() should return RTX_ERR since no tasks exist yet!\x1b[0m\r\n");
+            task_info_passed = false;
+            break;
+        }
+
+        TCB zeroed_task_info;
+        memset(&task_info, 0, sizeof(TCB));
+        if (memcmp(&task_info, &zeroed_task_info, sizeof(TCB)) != 0) {
+            printf("\x1b[1m\x1b[91mosTaskInfo() should not modify the task_info struct when it fails!\x1b[0m\r\n");
+            task_info_passed = false;
+            break;
+        }
+    }
+    if (task_info_passed) {
+        printf("\x1b[1m\x1b[92mosTaskInfo() is behaving as expected before the kernel starts!\x1b[0m\r\n");
         ++num_passed;
     }
 
