@@ -13,7 +13,7 @@
  * Constants/Defines
  * --------------------------------------------------------------------------------------------- */
 
-#define NUM_TEST_FUNCTIONS 9
+#define NUM_TEST_FUNCTIONS 8
 
 //X macros are magical! :)
 //Order: function name, stack size, description string, author string
@@ -23,12 +23,14 @@
     X(eternalprintf,                STACK_SIZE,     "Group 13's first testcase. No idea why that's the name...",    "JZJ") \
     X(odds_are_stacked_against_you, STACK_SIZE,     "Stack integrity test across osYield()",                        "JZJ") \
     X(i_prefer_latches,             STACK_SIZE,     "Register integrity test accross osYield()",                    "JZJ") \
-    X(task_wrapper_test,            STACK_SIZE,     "What happens if a task's function returns?",                   "JZJ") \
     X(reincarnation,                STACK_SIZE,     "A task whose last act is to recreate itself",                  "JZJ") \
     X(insanity,                     0x400,          "This is a tough one, but you can do it!",                      "JZJ") \
     X(greedy,                       STACK_SIZE,     "Stack exaustion test. This test should come last.",            "JZJ")
 //TODO multithreaded mandelbrot
 //TODO more
+
+//Bonus tests!
+//X(task_wrapper_test,            STACK_SIZE,     "What happens if a task's function returns?",                   "JZJ")
 
 #define NUM_PRIVILEGED_TESTS 13
 
@@ -455,6 +457,7 @@ static void eternalprintf(void*) {
 
     function_complete   = true;
     function_status     = true;
+    osTaskExit();
 }
 
 static void odds_are_stacked_against_you(void*) {
@@ -514,12 +517,6 @@ static void i_prefer_latches(void*) {
     function_complete = true;
     function_status = passed;
     osTaskExit();
-}
-
-static void task_wrapper_test(void*) {
-    function_complete   = true;
-    function_status     = true;
-    //NOT calling osTaskExit(). Your code should handle this.
 }
 
 static void reincarnation(void*) {
@@ -630,4 +627,10 @@ static void greedy(void*) {
     function_complete = true;
     function_status   = false;
     osTaskExit();
+}
+
+static void task_wrapper_test(void*) {
+    function_complete   = true;
+    function_status     = true;
+    //NOT calling osTaskExit(). Your code should handle this.
 }
