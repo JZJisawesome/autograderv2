@@ -34,6 +34,24 @@
 
 #define FN_MANAGER_STACK_SIZE 0x400
 
+#define fancy_printf_primitive(prefix, ...) do { \
+    printf("%s", prefix); \
+    printf(__VA_ARGS__); \
+    printf("\x1b[0m\r\n"); \
+} while (0)
+
+//Colours!
+#define rprintf(...) fancy_printf_primitive("\x1b[1m\x1b[91m", __VA_ARGS__)
+#define gprintf(...) fancy_printf_primitive("\x1b[1m\x1b[92m", __VA_ARGS__)
+#define yprintf(...) fancy_printf_primitive("\x1b[1m\x1b[93m", __VA_ARGS__)
+#define bprintf(...) fancy_printf_primitive("\x1b[1m\x1b[94m", __VA_ARGS__)
+#define mprintf(...) fancy_printf_primitive("\x1b[1m\x1b[95m", __VA_ARGS__)
+#define cprintf(...) fancy_printf_primitive("\x1b[1m\x1b[96m", __VA_ARGS__)
+#define wprintf(...) fancy_printf_primitive("\x1b[1m\x1b[97m", __VA_ARGS__)
+
+//Test functions that print should use this ONLY
+#define tprintf(...) fancy_printf_primitive("    \x1b[90m", __VA_ARGS__)
+
 /* ------------------------------------------------------------------------------------------------
  * Includes
  * --------------------------------------------------------------------------------------------- */
@@ -120,51 +138,51 @@ int main(void) {
 
     //Logo!
     printf("%s", LOGO);
-    printf("\x1b[1mNote that a base level of functionality is required in order to run the autograder\r\n");
-    printf("to completion without crashing. Even if you can't get that far right away,\r\n");
-    printf("as you make progress you'll get further and further through the autograder\r\n");
-    printf("code, which can be a great way to guage your progress in and of itself!\r\n");
-    printf("Cheers and best of luck. Let's get into it! - \x1b[95mJZJ\x1b[0m\r\n\r\n");
+    wprintf("Note that a base level of functionality is required in order to run the autograder");
+    wprintf("to completion without crashing. Even if you can't get that far right away,");
+    wprintf("as you make progress you'll get further and further through the autograder");
+    wprintf("code, which can be a great way to guage your progress in and of itself!");
+    wprintf("Cheers and best of luck. Let's get into it! - \x1b[95mJZJ\r\n");
 
     //Getting into it...
-    printf("\x1b[1mInitializing the kernel and doing some pre-osKernelStart() tests...\x1b[0m\r\n");
+    wprintf("Initializing the kernel and doing some pre-osKernelStart() tests...");
 
     //Privileged test #1
     if (osTaskExit() != RTX_ERR) {
-        printf("\x1b[1m\x1b[91mosTaskExit() should return RTX_ERR when called from a privileged context!\x1b[0m\r\n");
+        rprintf("osTaskExit() should return RTX_ERR when called from a privileged context!");
     } else {
-        printf("\x1b[1m\x1b[92mAwesome, you passed the first osTaskExit() test!\x1b[0m\r\n");
+        gprintf("Awesome, you passed the first osTaskExit() test!");
         ++num_passed;
     }
 
     //Privileged test #2
     if (osKernelStart() != RTX_ERR) {
-        printf("\x1b[1m\x1b[91mosKernelStart() should return RTX_ERR when called before the kernel was initialized!\x1b[0m\r\n");
+        rprintf("osKernelStart() should return RTX_ERR when called before the kernel was initialized!");
     } else {
-        printf("\x1b[1m\x1b[92mNice work on the pre-init osKernelStart() behavior!\x1b[0m\r\n");
+        gprintf("Nice work on the pre-init osKernelStart() behavior!");
         ++num_passed;
     }
 
     //Privileged test #3
     if (osTaskExit() != RTX_ERR) {
-        printf("\x1b[1m\x1b[91mosTaskExit() should return RTX_ERR when called from a privileged context!\x1b[0m\r\n");
+        rprintf("osTaskExit() should return RTX_ERR when called from a privileged context!");
     } else {
-        printf("\x1b[1m\x1b[92mGood pre-osKernelStart() osTaskExit() behavior!\x1b[0m\r\n");
+        gprintf("Good pre-osKernelStart() osTaskExit() behavior!");
         ++num_passed;
     }
 
     //Privileged test #4
     if (getTID() != 0) {
-        printf("\x1b[1m\x1b[91mgetTID() should return 0 when called from a privileged context!\x1b[0m\r\n");
+        rprintf("getTID() should return 0 when called from a privileged context!");
     } else {
-        printf("\x1b[1m\x1b[92mGood pre-start getTID() behaviour!\x1b[0m\r\n");
+        gprintf("Good pre-start getTID() behaviour!");
         ++num_passed;
     }
 
     //Privileged test #5
     osYield();
     ++num_passed;
-    printf("\x1b[1m\x1b[92mYou survived an osYield before the kernel started!\x1b[0m\r\n");
+    gprintf("You survived an osYield before the kernel started!");
 
     //Privileged test #6
     bool task_info_passed = true;
@@ -172,75 +190,75 @@ int main(void) {
         TCB task_info;
         memset(&task_info, 0, sizeof(TCB));
         if (osTaskInfo((task_t)ii, &task_info) != RTX_ERR) {
-            printf("\x1b[1m\x1b[91mosTaskInfo() should return RTX_ERR since no tasks exist yet!\x1b[0m\r\n");
+            rprintf("osTaskInfo() should return RTX_ERR since no tasks exist yet!");
             task_info_passed = false;
             break;
         }
 
         TCB zeroed_task_info;
-        memset(&task_info, 0, sizeof(TCB));
+        memset(&zeroed_task_info, 0, sizeof(TCB));
         if (memcmp(&task_info, &zeroed_task_info, sizeof(TCB)) != 0) {
-            printf("\x1b[1m\x1b[91mosTaskInfo() should not modify the task_info struct when it fails!\x1b[0m\r\n");
+            rprintf("osTaskInfo() should not modify the task_info struct when it fails!");
             task_info_passed = false;
             break;
         }
     }
     if (task_info_passed) {
-        printf("\x1b[1m\x1b[92mosTaskInfo() is behaving as expected before the kernel starts!\x1b[0m\r\n");
+        gprintf("osTaskInfo() is behaving as expected before the kernel starts!");
         ++num_passed;
     }
     
     //TODO more tests pre-init
 
     //Privileged test #7
-    printf("\x1b[1mInitializing the kernel...\x1b[0m\r\n");
+    wprintf("Initializing the kernel...");
     osKernelInit();
     ++num_passed;
-    printf("\x1b[1m\x1b[92mAlrighty, the kernel is initialized!\x1b[0m\x1b[1m Let's see how you're doing so far...\x1b[0m\r\n");
+    gprintf("Alrighty, the kernel is initialized!\x1b[0m\x1b[1m Let's see how you're doing so far...");
     print_score_so_far();
     
     //Privileged test #8
     if (getTID() != 0) {
-        printf("\x1b[1m\x1b[91mgetTID() should return 0 when called from a privileged context!\x1b[0m\r\n");
+        rprintf("getTID() should return 0 when called from a privileged context!");
     } else {
-        printf("\x1b[1m\x1b[92mgetTID() still behaving as expected after init!\x1b[0m\r\n");
+        gprintf("getTID() still behaving as expected after init!");
         ++num_passed;
     }
 
     //Privileged test #9
     if (osTaskExit() != RTX_ERR) {
-        printf("\x1b[1m\x1b[91mosTaskExit() should return RTX_ERR when called from a privileged context!\x1b[0m\r\n");
+        rprintf("osTaskExit() should return RTX_ERR when called from a privileged context!");
     } else {
-        printf("\x1b[1m\x1b[92mosTaskExit() still behaving as expected after init!\x1b[0m\r\n");
+        gprintf("osTaskExit() still behaving as expected after init!");
         ++num_passed;
     }
 
     //Privileged test #10
     osYield();
     ++num_passed;
-    printf("\x1b[1m\x1b[92mYou survived ANOTHER osYield before the kernel started!\x1b[0m\r\n");
+    gprintf("You survived ANOTHER osYield before the kernel started!");
 
     //Privileged test #11
     task_info_passed = true;
-    for (task_t ii = 0; ii < MAX_TASKS; ++ii) {
+    for (int ii = 0; ii < MAX_TASKS; ++ii) {
         TCB task_info;
         memset(&task_info, 0, sizeof(TCB));
-        if (osTaskInfo(ii, &task_info) != RTX_ERR) {
-            printf("\x1b[1m\x1b[91mosTaskInfo() should return RTX_ERR since no tasks exist yet!\x1b[0m\r\n");
+        if (osTaskInfo((task_t)ii, &task_info) != RTX_ERR) {
+            rprintf("osTaskInfo() should return RTX_ERR since no tasks exist yet!");
             task_info_passed = false;
             break;
         }
 
         TCB zeroed_task_info;
-        memset(&task_info, 0, sizeof(TCB));
+        memset(&zeroed_task_info, 0, sizeof(TCB));
         if (memcmp(&task_info, &zeroed_task_info, sizeof(TCB)) != 0) {
-            printf("\x1b[1m\x1b[91mosTaskInfo() should not modify the task_info struct when it fails!\x1b[0m\r\n");
+            rprintf("osTaskInfo() should not modify the task_info struct when it fails!");
             task_info_passed = false;
             break;
         }
     }
     if (task_info_passed) {
-        printf("\x1b[1m\x1b[92mosTaskInfo() is behaving as expected before the kernel starts!\x1b[0m\r\n");
+        gprintf("osTaskInfo() is behaving as expected before the kernel starts!");
         ++num_passed;
     }
 
@@ -250,13 +268,13 @@ int main(void) {
     test_function_manager_task.ptask      = test_function_manager;
     test_function_manager_task.stack_size = FN_MANAGER_STACK_SIZE;
     if (osCreateTask(&test_function_manager_task) == RTX_ERR) {
-        printf("\x1b[1m\x1b[91mosCreateTask() failed to create the test function manager task!\x1b[0m\r\n");
-        printf("\x1b[1mSadly this means we can't really continue, but don't give up! :)\x1b[0m\r\n");
+        rprintf("osCreateTask() failed to create the test function manager task!");
+        rprintf("Sadly this means we can't really continue, but don't give up! :)");
         while(true);
     } else if (test_function_manager_task.tid == 0) {
-        printf("\x1b[1m\x1b[91mosCreateTask() succeeded but didn't set TID in the task it was passed!\x1b[0m\r\n");
+        rprintf("osCreateTask() succeeded but didn't set TID in the task it was passed!");
     } else {
-        printf("\x1b[1m\x1b[92mSuccessfully created the test function manager task!\x1b[0m\r\n");
+        gprintf("Successfully created the test function manager task!");
         ++num_passed;
     }
 
@@ -268,41 +286,42 @@ int main(void) {
         if (osTaskInfo(ii, &task_info) != RTX_ERR) {
             if (ii == test_function_manager_task.tid) {//The task we created
                 if (task_info.ptask != test_function_manager) {
-                    printf("\x1b[1m\x1b[91mosTaskInfo() reporting incorrect ptask, or bad TCB initialization!\x1b[0m\r\n");
+                    rprintf("osTaskInfo() reporting incorrect ptask, or bad TCB initialization!");
                     task_info_passed = false;
                     break;
                 }
 
-                if (task_info.stack_size != FN_MANAGER_STACK_SIZE) {
-                    printf("\x1b[1m\x1b[91mosTaskInfo() reporting incorrect stack size, or bad TCB initialization!\x1b[0m\r\n");
+                if (task_info.stack_size < FN_MANAGER_STACK_SIZE) {
+                    rprintf("osTaskInfo() reporting incorrect stack size, or bad TCB initialization!");
                     task_info_passed = false;
                     break;
                 }
 
                 continue;
             }
-            printf("\x1b[1m\x1b[91mosTaskInfo() should return RTX_ERR since no tasks exist yet!\x1b[0m\r\n");
+
+            rprintf("osTaskInfo() should return RTX_ERR since no tasks exist yet!");
             task_info_passed = false;
             break;
         }
 
         TCB zeroed_task_info;
-        memset(&task_info, 0, sizeof(TCB));
+        memset(&zeroed_task_info, 0, sizeof(TCB));
         if (memcmp(&task_info, &zeroed_task_info, sizeof(TCB)) != 0) {
-            printf("\x1b[1m\x1b[91mosTaskInfo() should not modify the task_info struct when it fails!\x1b[0m\r\n");
+            rprintf("osTaskInfo() should not modify the task_info struct when it fails!");
             task_info_passed = false;
             break;
         }
     }
     if (task_info_passed) {
-        printf("\x1b[1m\x1b[92mosTaskInfo() is behaving as expected before the kernel starts!\x1b[0m\r\n");
+        gprintf("osTaskInfo() is behaving as expected before the kernel starts!");
         ++num_passed;
     }
 
     //And off we go!
-    printf("\r\n\x1b[1mOkay, I'm calling osKernelStart() now. This is a big step, don't get disheartened\r\n");
-    printf("if it doesn't work on your first try, it certainly didn't for our group :)\r\n");
-    printf("Before we leave though, here's your score so far:\x1b[0m\r\n");
+    wprintf("Okay, I'm calling osKernelStart() now. This is a big step, don't get disheartened");
+    wprintf("if it doesn't work on your first try, it certainly didn't for our group :)");
+    wprintf("Before we leave though, here's your score so far:");
     print_score_so_far();
     printf("\r\n\r\n");
     osKernelStart();
@@ -310,14 +329,14 @@ int main(void) {
 }
 
 /* ------------------------------------------------------------------------------------------------
- * Static Function Implementations
+ * Static Function Implementations (Non-Test Functions)
  * --------------------------------------------------------------------------------------------- */
 
 static void print_score_so_far(void) {
     double jekelscore_ratio = (double)num_passed / (double)NUM_TESTS;
     uint32_t jekelscore = (uint32_t)(jekelscore_ratio * 100);
-    printf(
-        "\x1b[1mYour \x1b[95mJekelScore\x1b[0m\x1b[1m is \x1b[96m%lu%%\x1b[0m\x1b[1m so far (\x1b[96m%d/%d\x1b[0m\x1b[1m passed)!\x1b[0m\r\n",
+    wprintf(
+        "Your \x1b[95mJekelScore\x1b[0m\x1b[1m is \x1b[96m%lu%%\x1b[0m\x1b[1m so far (\x1b[96m%d/%d\x1b[0m\x1b[1m passed)!",
         jekelscore,
         num_passed,
         NUM_TESTS
@@ -325,7 +344,7 @@ static void print_score_so_far(void) {
 }
 
 static void test_function_manager(void*) {
-    printf("\x1b[1m\x1b[92mHaha, awesome you made it! This is being printed from a user task!\x1b[0m\r\n");
+    gprintf("Haha, awesome you made it! This is being printed from a user task!");
     ++num_passed;
     print_score_so_far();
 
@@ -338,31 +357,39 @@ static void test_function_manager(void*) {
         task.ptask      = test_functions[ii].ptr;
         task.stack_size = test_functions[ii].stack_size;
         
-        printf(
-            "\x1b[1mRunning test function \x1b[96m#%u\x1b[0m\x1b[1m, \x1b[96m%s()\x1b[0m\x1b[1m, "
-            "with a stack size of \x1b[96m%u\x1b[0m\x1b[1m bytes...\x1b[0m\r\n",
+        wprintf(
+            "Running test function \x1b[96m#%u\x1b[0m\x1b[1m, \x1b[96m%s()\x1b[0m\x1b[1m, "
+            "with a stack size of \x1b[96m%u\x1b[0m\x1b[1m bytes...",
             ii + 1,
             test_functions[ii].name,
             test_functions[ii].stack_size
         );
 
         int result = osCreateTask(&task);
-        assert((result == RTX_OK) && "\x1b[1m\x1b[91mFailed to create task!\x1b[0m");
+        if (result != RTX_OK) {
+            rprintf("Failed to create a task for the function! Moving on...");
+            continue;
+        }
+
+        if (task.tid == 0) {
+            yprintf("Warning: TID value wasn't set correctly!\x1b[0m\r\n");
+            yprintf("You were likely already docked for this so I won't dock you again...\r\n");
+        }
 
         while (!function_complete) {
             osYield();
         }
 
         if (function_status) {
-            printf(
-                "\x1b[1m\x1b[92mTest function \x1b[96m#%u\x1b[92m, \x1b[96m%s()\x1b[92m, passed!\x1b[0m\r\n",
+            gprintf(
+                "Test function \x1b[96m#%u\x1b[92m, \x1b[96m%s()\x1b[92m, passed!",
                 ii + 1,
                 test_functions[ii].name
             );
             ++num_passed;
         } else {
-            printf(
-                "\x1b[1m\x1b[91mTest function \x1b[96m#%u\x1b[91m, \x1b[96m%s()\x1b[91m, failed!\x1b[0m\r\n",
+            rprintf(
+                "Test function \x1b[96m#%u\x1b[91m, \x1b[96m%s()\x1b[91m, failed!",
                 ii + 1,
                 test_functions[ii].name
             );
@@ -373,22 +400,26 @@ static void test_function_manager(void*) {
         }
     }
 
-    printf("\r\n\x1b[1m\x1b[92mYou made it to the end! :)\x1b[0m\r\n");
+    gprintf("\r\nYou made it to the end! :)");
 
     print_score_so_far();
 
     if (num_passed == NUM_TESTS) {
-        printf("\x1b[1m\x1b[92mYou passed all the tests with flying colours! Good stuff! :)\x1b[0m\r\n");
+        gprintf("You passed all the tests with flying colours! Good stuff! :)");
     } else {
-        printf("\x1b[1m\x1b[93mYou didn't quite get them all, but don't give up! :)\x1b[0m\r\n");
+        yprintf("You didn't quite get them all, but don't give up! :)");
     }
 
-    printf("\x1b[1mHave an idea for a test? Submit a PR at \x1b[96mhttps://github.com/JZJisawesome/autograderv2\x1b[0m\x1b[1m!\x1b[0m\r\n");
-    printf("\x1b[1mCheers and best of luck! - \x1b[95mJZJ\x1b[0m\r\n");
+    wprintf("Have an idea for a test? Submit a PR at \x1b[96mhttps://github.com/JZJisawesome/autograderv2\x1b[0m\x1b[1m !");
+    wprintf("Cheers and best of luck! - \x1b[95mJZJ");
 
-    printf("\r\n\x1b[1mI'll loop forever now, reset or reprogram the board to go again! :)\x1b[0m\r\n");
+    printf("\r\n\x1b[1mI'll spin forever now, reset or reprogram the board to go again! :)");
     while (true);
 }
+
+/* ------------------------------------------------------------------------------------------------
+ * Static Function Implementations (Test Functions)
+ * --------------------------------------------------------------------------------------------- */
 
 static void sanity(void*) {
     //Do nothing!
@@ -409,20 +440,20 @@ static void say_hello(void*) {
     //Is the task environent robust enough to support calling printf()?
     //Almost certainly it is at this point if you're successfully running the test_manager_function(),
     //but hey, can you call printf from more than one task?
-    printf("Hello World!\r\n");
+    tprintf("Hello World!");
     function_complete = true;
     function_status = true;
     osTaskExit();
 }
 
 static void insanity_helper(void*) {
-    printf("Hello there from TID %u!\r\n", getTID());
+    tprintf("Hello there from TID %u!", getTID());
     ++insanity_counter;
     osTaskExit();
 }
 
 static void insanity(void*) {
-    printf("I have a bunch of friends who are going to say hello!\r\n");
+    tprintf("I have a bunch of friends who are going to say hello!");
 
     TCB task;
     memset(&task, 0, sizeof(TCB));
@@ -440,7 +471,7 @@ static void insanity(void*) {
 
     //TODO even more stress
 
-    printf("And goodbye!\r\n");
+    tprintf("And goodbye!");
     function_complete = true;
     function_status = true;
     osTaskExit();
