@@ -41,6 +41,13 @@
 #define EVIL_ROBIN      NUM_SIDEKICKS / 2
 
 #define INSANITY_LEVEL 50
+#define MANDELBROT_RMIN  -1.8f
+#define MANDELBROT_RMAX  0.8f
+#define MANDELBROT_RPIX  60
+#define MANDELBROT_IPIX  20
+#define MANDELBROT_IMIN  -1.1f
+#define MANDELBROT_IMAX  1.1f
+#define MANDELBROT_DIVERGE_THRESHOLD 2.0f
 
 //Making it to the manager is also a point!
 #define NUM_TESTS (NUM_TEST_FUNCTIONS + NUM_PRIVILEGED_TESTS + 1)
@@ -117,6 +124,10 @@ static task_t   beyblade_let_it_rip(void);//Does anyone remember this show? Kind
 
 static void square_batman_helper(void*);
 static void insanity_helper(void*);
+
+//Too bad these couldn't be part of insanity
+static uint32_t mandelbrot_iterations(float creal, float cimag);
+static void     mandelbrot_forever(void);
 
 //Test function definitions
 #define X(name, stack_size, desc, author) static void name(void*);
@@ -373,11 +384,19 @@ int main(void) {
  * --------------------------------------------------------------------------------------------- */
 
 static void print_score_so_far(void) {
+    //Can't use any floating point here due to extended processor state
+    /*
     double jekelscore_ratio = (double)num_passed / (double)NUM_TESTS;
     uint32_t jekelscore = (uint32_t)(jekelscore_ratio * 100);
+    */
+    //Do (very incorrectly rounded and unoptimized) fixed point math instead
+    uint32_t jekelscore_times_100   = (num_passed * 10000) / NUM_TESTS;
+    uint32_t jekelscore_whole       = (num_passed == NUM_TESTS) ? 100 : (jekelscore_times_100 / 100);
+    uint32_t jekelscore_fraction    = (num_passed == NUM_TESTS) ? 0 : (jekelscore_times_100 % 100);
     wprintf(
-        "Your \x1b[95mJekelScore\x1b[0m\x1b[1m is \x1b[96m%lu%%\x1b[0m\x1b[1m so far (\x1b[96m%d/%d\x1b[0m\x1b[1m passed)!",
-        jekelscore,
+        "Your \x1b[95mJekelScore\x1b[0m\x1b[1m is \x1b[96m%lu.%02lu%%\x1b[0m\x1b[1m so far (\x1b[96m%d/%d\x1b[0m\x1b[1m passed)!",
+        jekelscore_whole,
+        jekelscore_fraction,
         num_passed,
         NUM_TESTS
     );
@@ -398,12 +417,14 @@ static void test_function_manager(void*) {
         task.stack_size = test_functions[ii].stack_size;
         
         wprintf(
-            "Running test function \x1b[96m#%u\x1b[0m\x1b[1m, \x1b[96m%s()\x1b[0m\x1b[1m, "
-            "with a stack size of \x1b[96m%u\x1b[0m\x1b[1m bytes...",
+            "\r\nRunning test function \x1b[96m#%u\x1b[0m\x1b[1m, \x1b[96m%s()\x1b[0m\x1b[1m, "
+            "by \x1b[96m%s\x1b[0m\x1b[1m, with a stack size of \x1b[96m%u\x1b[0m\x1b[1m bytes!",
             ii + 1,
             test_functions[ii].name,
+            test_functions[ii].author,
             test_functions[ii].stack_size
         );
+        wprintf("Description: \x1b[96m%s", test_functions[ii].description);
 
         int result = osCreateTask(&task);
         if (result != RTX_OK) {
@@ -453,8 +474,7 @@ static void test_function_manager(void*) {
     wprintf("Have an idea for a test? Submit a PR at \x1b[96mhttps://github.com/JZJisawesome/autograderv2\x1b[0m\x1b[1m !");
     wprintf("Cheers and best of luck! - \x1b[95mJZJ");
 
-    wprintf("\r\nI'll spin forever now, reset or reprogram the board to go again! :)");
-    while (true);
+    mandelbrot_forever();
 }
 
 static void spinner(void*) {
@@ -489,6 +509,49 @@ static task_t beyblade_let_it_rip(void) {
     } else {
         return TID_NULL;
     }
+}
+
+//This mandelbrot stuff was going to be part of insanity(), but there's no easy way to force
+//GCC to use soft floating point without control of compiler flags. This is a problem since
+//no ones kernels are set up to save extended processor state in addition to integer state.
+//So just do this at the end for fun!
+static uint32_t mandelbrot_iterations(float creal, float cimag) {
+    float zreal = 0.0f;
+    float zimag = 0.0f;
+
+    uint32_t ii = 0;
+
+    while ((ii < INSANITY_LEVEL) && (((zreal * zreal) + (zimag * zimag)) < MANDELBROT_DIVERGE_THRESHOLD)) {
+        float next_zreal = (zreal * zreal) - (zimag * zimag) + creal;
+        float next_zimag = (2.0f * zreal * zimag) + cimag;
+        zimag = next_zimag;
+        zreal = next_zreal;
+        ++ii;
+    }
+
+    return ii;
+}
+
+static void mandelbrot_forever(void) {//Can't return due to the FP issue, we don't ever want this task to exit
+    wprintf("\r\nI'll spin forever now, reset or reprogram the board to go again! :)");
+
+
+    wprintf("Until then, here's the Mandelbrot set I promised!");
+    float real_step = (MANDELBROT_RMAX - MANDELBROT_RMIN) / MANDELBROT_RPIX;
+    float imag_step = (MANDELBROT_IMAX - MANDELBROT_IMIN) / MANDELBROT_IPIX;
+    float cimag = MANDELBROT_IMIN;
+    for (int ii = 0; ii < MANDELBROT_IPIX; ++ii) {
+        float creal = MANDELBROT_RMIN;
+        for (int jj = 0; jj < MANDELBROT_RPIX; ++jj) {
+            uint32_t iterations = mandelbrot_iterations(creal, cimag);
+            printf("%s", iterations > 25 ? " " : "*");
+            creal += real_step;
+        }
+        printf("\r\n");
+        cimag += imag_step;
+    }
+
+    while (true);
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -838,17 +901,15 @@ static void insanity(void*) {//Corresponds to Lab 1 evaluation outline #10, and 
         osYield();
     }
 
-    //tprintf("Aren't they great?");
-    //
-    //tprintf("On an unrelated note, do you like fractals?");
-
-    //TODO even more stress
-    //TODO multithreaded mandelbrot
+    if (!function_status) {
+        treturn(false);
+    }
 
     tprintf("And goodbye!");
-    function_complete = true;
-    //function_status potentially set to false by the helpers
-    osTaskExit();
+    tprintf("(There would have been a cool mandelbrot stress test here, but there were issues");
+    tprintf("I couldn't resolve to due with saving and restoring floating point state.");
+    tprintf("So it will be at the end instead, where we don't need to save anything!)");
+    treturn(true);
 }
 
 static void greedy(void*) {//Corresponds to Lab 1 evaluation outline #9
