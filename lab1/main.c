@@ -13,20 +13,20 @@
  * Constants/Defines
  * --------------------------------------------------------------------------------------------- */
 
-#define NUM_TEST_FUNCTIONS 8
+#define NUM_TEST_FUNCTIONS 9
 
 //X macros are magical! :)
 //Order: function name, stack size, description string, author string
 #define TEST_FUNCTIONS \
     X(sanity,                       STACK_SIZE,     "Basic sanity test",                                            "JZJ") \
-    X(stack_reuse,                  STACK_SIZE,     "Basic stack reuse test: Do you survive?",                      "JZJ") \
     X(eternalprintf,                STACK_SIZE,     "Group 13's first testcase. No idea why that's the name...",    "JZJ") \
+    X(stack_reuse,                  STACK_SIZE,     "Basic stack reuse test",                                       "JZJ") \
     X(odds_are_stacked_against_you, STACK_SIZE,     "Stack integrity test across osYield()",                        "JZJ") \
     X(i_prefer_latches,             STACK_SIZE,     "Register integrity test accross osYield()",                    "JZJ") \
+    X(tid_limits,                   STACK_SIZE,     "Maximum number of TIDs test",                                  "JZJ") \
     X(reincarnation,                STACK_SIZE,     "A task whose last act is to recreate itself",                  "JZJ") \
     X(insanity,                     0x400,          "This is a tough one, but you can do it!",                      "JZJ") \
     X(greedy,                       STACK_SIZE,     "Stack exaustion test. This test should come last.",            "JZJ")
-//TODO multithreaded mandelbrot
 //TODO more
 
 //Bonus tests!
@@ -97,6 +97,11 @@ static void print_score_so_far(void);
 
 static void test_function_manager(void*);
 
+//Spinning helper task infastructure that's useful for several tests
+static void     spinner(void*);//Spins while osYield()ing until it "topples". Used by a few tests
+static void     topple_spinners(void);//Waits for spinners to exit
+static task_t   beyblade_let_it_rip(void);//Does anyone remember this show? Kinda just a marketing stunt to sell spinning tops...
+
 static void insanity_helper(void*);
 
 #define X(name, stack_size, desc, author) static void name(void*);
@@ -107,21 +112,7 @@ TEST_FUNCTIONS
  * Static Variables
  * --------------------------------------------------------------------------------------------- */
 
-static const test_function_info_s test_functions[NUM_TEST_FUNCTIONS] = {
-    //These should set function_complete to true when they finish so we can move onto the next one
-    //This synchronization mechanism works only if there's one test function running at once and
-    //they only write true (while the test_function_manager reads it/writes false)
-#define X(name, stack_size, desc, author) {name, #name, stack_size, desc, author},
-    TEST_FUNCTIONS
-#undef X
-};
-
-static volatile bool function_complete  = false;
-static volatile bool function_status    = false;//False if failed, true if passed
-
-static volatile size_t num_passed = 0;
-
-static volatile size_t insanity_counter = 0;
+//Static constants
 
 static const char* const LOGO = "\r\n\r\n\x1b[95m"
 "             _                            _                 ____\r\n"
@@ -133,6 +124,29 @@ static const char* const LOGO = "\r\n\r\n\x1b[95m"
 "\x1b[1m\"We're doing a sequel!\"\x1b[0m\r\n"
 "\x1b[1mCopyright (C) 2024 \x1b[95mJohn Jekel\x1b[0m\x1b[1m and contributors\x1b[0m\r\n"
 "\x1b[1mRepo: \x1b[96mhttps://github.com/JZJisawesome/autograderv2\x1b[0m\r\n\r\n";
+
+static const test_function_info_s test_functions[NUM_TEST_FUNCTIONS] = {
+    //These should set function_complete to true when they finish so we can move onto the next one
+    //This synchronization mechanism works only if there's one test function running at once and
+    //they only write true (while the test_function_manager reads it/writes false)
+#define X(name, stack_size, desc, author) {name, #name, stack_size, desc, author},
+    TEST_FUNCTIONS
+#undef X
+};
+
+//Mutable statics
+
+//Autograder state
+static volatile bool function_complete  = false;
+static volatile bool function_status    = false;//False if failed, true if passed
+static volatile size_t num_passed = 0;//Number of tests passed
+
+//Used by spinner() and friends
+static volatile size_t  spin_count = 0;
+static volatile bool    topple     = false;//Used by spinner() and friends
+
+//Testcase-specific statics
+static volatile size_t      insanity_counter = 0;
 
 /* ------------------------------------------------------------------------------------------------
  * Function Implementations
@@ -426,20 +440,46 @@ static void test_function_manager(void*) {
     while (true);
 }
 
+static void spinner(void*) {
+    while (!topple) {
+        //Around and around we go!
+        osYield();
+    }
+
+    //We toppled over!
+    --spin_count;
+    osTaskExit();
+}
+
+static void topple_spinners(void) {
+    topple = true;
+    while (spin_count) {
+        osYield();
+    }
+}
+
+static task_t beyblade_let_it_rip(void) {
+    //Does anyone remember this show? Kinda just a marketing stunt to sell spinning tops...
+    topple = false;
+    TCB spinner_task;
+    memset(&spinner_task, 0, sizeof(TCB));
+    spinner_task.ptask      = spinner;
+    spinner_task.stack_size = STACK_SIZE;
+    int result = osCreateTask(&spinner_task);
+    if (result == RTX_OK) {
+        ++spin_count;
+        return spinner_task.tid;
+    } else {
+        return TID_NULL;
+    }
+}
+
 /* ------------------------------------------------------------------------------------------------
  * Static Function Implementations (Test Functions)
  * --------------------------------------------------------------------------------------------- */
 
 static void sanity(void*) {
     //Do nothing!
-    function_complete   = true;
-    function_status     = true;
-    osTaskExit();
-}
-
-static void stack_reuse(void*) {
-    //Same a sanity, but it should re-use sanity's stack
-    //We can't really check this but at least it shouldn't crash :)
     function_complete   = true;
     function_status     = true;
     osTaskExit();
@@ -457,6 +497,29 @@ static void eternalprintf(void*) {
 
     function_complete   = true;
     function_status     = true;
+    osTaskExit();
+}
+
+static void stack_reuse(void*) {
+    //Setup a spinner and get info about it
+    task_t spinner1_tid = beyblade_let_it_rip();
+    TCB spinner1_info;
+    osTaskInfo(spinner1_tid, &spinner1_info);
+    topple_spinners();
+
+    //Now that the first spinner is gone, do another
+    task_t spinner2_tid = beyblade_let_it_rip();
+    TCB spinner2_info;
+    osTaskInfo(spinner2_tid, &spinner2_info);
+    topple_spinners();
+
+    tprintf("stack_high for spinner 1: 0x%lX", spinner1_info.stack_high);
+    tprintf("stack_high for spinner 2: 0x%lX", spinner2_info.stack_high);
+    tprintf("You passed if those are the same (and both spinners were actually created)!");
+
+    //We were successful if spinner 2 reused spinner 1's stack
+    function_complete   = true;
+    function_status     = spinner1_tid && spinner2_tid && (spinner1_info.stack_high == spinner2_info.stack_high);
     osTaskExit();
 }
 
@@ -516,6 +579,25 @@ static void i_prefer_latches(void*) {
 
     function_complete = true;
     function_status = passed;
+    osTaskExit();
+}
+
+static void tid_limits(void*) {
+    //Try to create as many spinner tasks as possible
+    int ii = 0;//This will contain how much we actually successfully created in the end
+    for (ii = 0; ii < (MAX_TASKS * 2); ++ii) {
+        if (beyblade_let_it_rip() == TID_NULL) {
+            break;
+        }
+    }
+
+    //Wait for them all to finish
+    topple_spinners();
+
+    //We were successful if we could only create MAX_TASKS - 3 tasks
+    //(Since the null task, the test_function_manager task, and this task take up 3 TIDs)
+    function_complete = true;
+    function_status   = ii == (MAX_TASKS - 3);
     osTaskExit();
 }
 
@@ -583,7 +665,12 @@ static void insanity(void*) {
         osYield();
     }
 
+    //tprintf("Aren't they great?");
+    //
+    //tprintf("On an unrelated note, do you like fractals?");
+
     //TODO even more stress
+    //TODO multithreaded mandelbrot
 
     tprintf("And goodbye!");
     function_complete = true;
@@ -629,8 +716,10 @@ static void greedy(void*) {
     osTaskExit();
 }
 
+/*
 static void task_wrapper_test(void*) {
     function_complete   = true;
     function_status     = true;
-    //NOT calling osTaskExit(). Your code should handle this.
+    //NOT calling osTaskExit()
 }
+*/
