@@ -24,7 +24,7 @@
     X(stack_reuse,                  STACK_SIZE,     "Basic stack reuse test",                                       "JZJ") \
     X(square_batman,                STACK_SIZE,     "Round robin test",                                             "JZJ") \
     X(odds_are_stacked_against_you, STACK_SIZE,     "Stack integrity test across osYield()",                        "JZJ") \
-    X(i_prefer_latches,             STACK_SIZE,     "Register integrity test accross osYield()",                    "JZJ") \
+    X(i_prefer_latches,             STACK_SIZE,     "Register integrity test across osYield()",                     "JZJ") \
     X(tid_limits,                   STACK_SIZE,     "Maximum number of TIDs test",                                  "JZJ") \
     X(tid_uniqueness,               STACK_SIZE,     "Ensure the same TID isn't used for two tasks",                 "JZJ") \
     X(reincarnation,                STACK_SIZE,     "A task whose last act is to recreate itself",                  "JZJ") \
