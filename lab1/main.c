@@ -13,26 +13,32 @@
  * Constants/Defines
  * --------------------------------------------------------------------------------------------- */
 
-#define NUM_TEST_FUNCTIONS 9
+#define NUM_TEST_FUNCTIONS 12
 
 //X macros are magical! :)
 //Order: function name, stack size, description string, author string
 #define TEST_FUNCTIONS \
     X(sanity,                       STACK_SIZE,     "Basic sanity test",                                            "JZJ") \
     X(eternalprintf,                STACK_SIZE,     "Group 13's first testcase. No idea why that's the name...",    "JZJ") \
+    X(reject_bad_tcbs,              STACK_SIZE,     "You shouldn't create tasks from bad TCBs, it's not healthy!",  "JZJ") \
     X(stack_reuse,                  STACK_SIZE,     "Basic stack reuse test",                                       "JZJ") \
+    X(square_batman,                STACK_SIZE,     "Round robin test",                                             "JZJ") \
     X(odds_are_stacked_against_you, STACK_SIZE,     "Stack integrity test across osYield()",                        "JZJ") \
     X(i_prefer_latches,             STACK_SIZE,     "Register integrity test accross osYield()",                    "JZJ") \
     X(tid_limits,                   STACK_SIZE,     "Maximum number of TIDs test",                                  "JZJ") \
+    X(tid_uniqueness,               STACK_SIZE,     "Ensure the same TID isn't used for two tasks",                 "JZJ") \
     X(reincarnation,                STACK_SIZE,     "A task whose last act is to recreate itself",                  "JZJ") \
     X(insanity,                     0x400,          "This is a tough one, but you can do it!",                      "JZJ") \
     X(greedy,                       STACK_SIZE,     "Stack exaustion test. This test should come last.",            "JZJ")
-//TODO more
+//TODO We can always use more testcases!
 
-//Bonus tests!
+//Bonus tests (not required to support these)!
 //X(task_wrapper_test,            STACK_SIZE,     "What happens if a task's function returns?",                   "JZJ")
 
 #define NUM_PRIVILEGED_TESTS 13
+
+#define NUM_SIDEKICKS   5
+#define EVIL_ROBIN      NUM_SIDEKICKS / 2
 
 #define INSANITY_LEVEL 50
 
@@ -58,6 +64,13 @@
 
 //Test functions that print should use this ONLY
 #define tprintf(...) fancy_printf_primitive("    \x1b[90m", __VA_ARGS__)
+
+//Convenience macro for exiting
+#define treturn(status) do { \
+    function_complete = true; \
+    function_status   = status; \
+    osTaskExit(); \
+} while (0)
 
 /* ------------------------------------------------------------------------------------------------
  * Includes
@@ -102,8 +115,10 @@ static void     spinner(void*);//Spins while osYield()ing until it "topples". Us
 static void     topple_spinners(void);//Waits for spinners to exit
 static task_t   beyblade_let_it_rip(void);//Does anyone remember this show? Kinda just a marketing stunt to sell spinning tops...
 
+static void square_batman_helper(void*);
 static void insanity_helper(void*);
 
+//Test function definitions
 #define X(name, stack_size, desc, author) static void name(void*);
 TEST_FUNCTIONS
 #undef X
@@ -137,16 +152,17 @@ static const test_function_info_s test_functions[NUM_TEST_FUNCTIONS] = {
 //Mutable statics
 
 //Autograder state
-static volatile bool function_complete  = false;
+static volatile bool function_complete  = false;//Causes things to move onto the next test
 static volatile bool function_status    = false;//False if failed, true if passed
 static volatile size_t num_passed = 0;//Number of tests passed
 
 //Used by spinner() and friends
 static volatile size_t  spin_count = 0;
-static volatile bool    topple     = false;//Used by spinner() and friends
+static volatile bool    topple     = false;
 
 //Testcase-specific statics
-static volatile size_t      insanity_counter = 0;
+static volatile int     square_batman_counters[NUM_SIDEKICKS] = {0, 0, 0};
+static volatile size_t  insanity_counter = 0;
 
 /* ------------------------------------------------------------------------------------------------
  * Function Implementations
@@ -160,7 +176,7 @@ int main(void) {
     MX_USART2_UART_Init();
 
     //Logo!
-    printf("%s", LOGO);
+    printf("%s", LOGO);//Corresponds to Lab 1 evaluation outline #0
     wprintf("Note that a base level of functionality is required in order to run the autograder");
     wprintf("to completion without crashing. Even if you can't get that far right away,");
     wprintf("as you make progress you'll get further and further through the autograder");
@@ -235,7 +251,7 @@ int main(void) {
 
     //Privileged test #7
     wprintf("Initializing the kernel...");
-    osKernelInit();
+    osKernelInit();//Corresponds to Lab 1 evaluation outline #0
     ++num_passed;
     gprintf("Alrighty, the kernel is initialized!\x1b[0m\x1b[1m Let's see how you're doing so far...");
     print_score_so_far();
@@ -290,7 +306,7 @@ int main(void) {
     memset(&test_function_manager_task, 0, sizeof(TCB));
     test_function_manager_task.ptask      = test_function_manager;
     test_function_manager_task.stack_size = FN_MANAGER_STACK_SIZE;
-    if (osCreateTask(&test_function_manager_task) == RTX_ERR) {
+    if (osCreateTask(&test_function_manager_task) == RTX_ERR) {//Corresponds to Lab 1 evaluation outline #1
         rprintf("    osCreateTask() failed to create the test function manager task!");
         rprintf("    Sadly this means we can't really continue, but don't give up! :)");
         while(true);
@@ -308,6 +324,7 @@ int main(void) {
         memset(&task_info, 0, sizeof(TCB));
         if (osTaskInfo(ii, &task_info) != RTX_ERR) {
             if (ii == test_function_manager_task.tid) {//The task we created
+                //Corresponds to Lab 1 evaluation outline #1
                 if (task_info.ptask != test_function_manager) {
                     rprintf("    osTaskInfo() reporting incorrect ptask, or bad TCB initialization!");
                     task_info_passed = false;
@@ -368,7 +385,7 @@ static void print_score_so_far(void) {
 
 static void test_function_manager(void*) {
     gprintf("Haha, awesome you made it! This is being printed from a user task!");
-    ++num_passed;
+    ++num_passed;//Corresponds to Lab 1 evaluation outline #2
     print_score_so_far();
 
     for (size_t ii = 0; ii < NUM_TEST_FUNCTIONS; ++ii) {
@@ -480,9 +497,7 @@ static task_t beyblade_let_it_rip(void) {
 
 static void sanity(void*) {
     //Do nothing!
-    function_complete   = true;
-    function_status     = true;
-    osTaskExit();
+    treturn(true);
 }
 
 static void eternalprintf(void*) {
@@ -495,12 +510,41 @@ static void eternalprintf(void*) {
 
     osYield();//For kicks
 
-    function_complete   = true;
-    function_status     = true;
-    osTaskExit();
+    treturn(true);
 }
 
-static void stack_reuse(void*) {
+static void reject_bad_tcbs(void*) {
+    TCB task;
+
+    //First, a task with a less-than-minimum stack size
+    memset(&task, 0, sizeof(TCB));
+    task.ptask      = sanity;
+    task.stack_size = STACK_SIZE / 2;
+    if (osCreateTask(&task) != RTX_ERR) {
+        tprintf("A task with a stack size less than the minimum was created!");
+        treturn(false);
+    }
+
+    //Next, a task with a null ptask function pointer
+    memset(&task, 0, sizeof(TCB));
+    task.ptask      = NULL;
+    task.stack_size = STACK_SIZE;
+    if (osCreateTask(&task) != RTX_ERR) {
+        tprintf("A task with a NULL ptask function pointer was created!");
+        treturn(false);
+    }
+
+    //Next, what about a null TCB pointer itself?
+    if (osCreateTask(NULL) != RTX_ERR) {
+        tprintf("A task with a NULL TCB pointer was created!");
+        treturn(false);
+    }
+
+    //We made it!
+    treturn(true);
+}
+
+static void stack_reuse(void*) {//PARTIALLY corresponds to Lab 1 evaluation outline #10 (less intense, insanity takes care of more)
     //Setup a spinner and get info about it
     task_t spinner1_tid = beyblade_let_it_rip();
     TCB spinner1_info;
@@ -518,9 +562,112 @@ static void stack_reuse(void*) {
     tprintf("You passed if those are the same (and both spinners were actually created)!");
 
     //We were successful if spinner 2 reused spinner 1's stack
-    function_complete   = true;
-    function_status     = spinner1_tid && spinner2_tid && (spinner1_info.stack_high == spinner2_info.stack_high);
+    treturn(spinner1_tid && spinner2_tid && (spinner1_info.stack_high == spinner2_info.stack_high));
+}
+
+static void square_batman_helper(void*) {
+    //Choose a counter for the test
+    int my_counter = 0;
+    for (int ii = 0; ii < NUM_SIDEKICKS; ++ii) {
+        if (square_batman_counters[ii] == 0) {
+            my_counter                  = ii;
+            square_batman_counters[ii]  = 1;
+            break;
+        }
+    }
+    tprintf("I am Robin #%d!", my_counter);
+
+    //Wait for all Robins to pick their counter
+    while (square_batman_counters[NUM_SIDEKICKS - 1] == 0) {
+        osYield();
+    }
+
+    //Let's see how round these Robins are!
+    for (int ii = 1; ii < 10; ++ii) {
+        tprintf(
+            "Incrementing counter %d from %d to %d",
+            my_counter,
+            square_batman_counters[my_counter],
+            square_batman_counters[my_counter] + 1
+        );
+        ++square_batman_counters[my_counter];
+
+        if ((ii == 5) && (my_counter == EVIL_ROBIN)) {
+            tprintf("I AM EVIL #%d! I'm going to exit early and throw the other Robins off!", my_counter);
+            osTaskExit();
+        }
+
+        osYield();
+    }
+
     osTaskExit();
+}
+
+static void square_batman(void*) {//Corresponds to Lab 1 evaluation outline #3 and #4
+    //Setup robins
+    TCB helper_task;
+    memset(&helper_task, 0, sizeof(TCB));
+    helper_task.ptask      = square_batman_helper;
+    helper_task.stack_size = STACK_SIZE;
+
+    for (int ii = 0; ii < NUM_SIDEKICKS; ++ii) {
+        if (osCreateTask(&helper_task) != RTX_OK) {
+            tprintf("we live in a society...");
+            treturn(false);
+        }
+    }
+
+    //Wait for all Robins to pick their counter
+    while (square_batman_counters[NUM_SIDEKICKS - 1] == 0) {
+        osYield();
+    }
+
+    tprintf("I'M BATMAN!");
+
+    //The entire round robin test is complete when all counters are 10
+    bool all_counters_are_10 = false;
+    while (!all_counters_are_10) {
+        all_counters_are_10 = true;
+
+        int minimum = 11;
+        int maximum = 0;
+        for (int ii = 0; ii < NUM_SIDEKICKS; ++ii) {
+            if (ii == EVIL_ROBIN) {//Ignore the evil Robin
+                continue;
+            }
+
+            if (square_batman_counters[ii] != 10) {
+                all_counters_are_10 = false;
+            }
+            
+            if (square_batman_counters[ii] < minimum) {
+                minimum = square_batman_counters[ii];
+            }
+
+            if (square_batman_counters[ii] > maximum) {
+                maximum = square_batman_counters[ii];
+            }
+        }
+
+        int difference = maximum - minimum;
+        if (difference > 1) {
+            tprintf("Your Robins aren't round enough!");
+            tprintf("The difference between the highest and lowest Robin counter is %d", difference);
+            for (int ii = 0; ii < NUM_SIDEKICKS; ++ii) {
+                tprintf("    Robin #%d: %d", ii, square_batman_counters[ii]);
+            }
+            treturn(false);
+        }
+
+        osYield();
+    }
+
+    //Success! Yield a few times just to ensure the Robins exit
+    tprintf("Your Robins are perfectly round!");
+    osYield();
+    osYield();
+    osYield();
+    treturn(true);
 }
 
 static void odds_are_stacked_against_you(void*) {
@@ -532,19 +679,15 @@ static void odds_are_stacked_against_you(void*) {
         osYield();
         for (size_t jj = 0; jj < (STACK_SIZE/2); ++jj) {
             if (stack_data[jj] != (jj & 0xFF)) {//Stack corruption!
-                function_complete = true;
-                function_status   = false;
-                return;
+                treturn(false);
             }
         }
     }
 
-    function_complete = true;
-    function_status   = true;
-    osTaskExit();
+    treturn(true);
 }
 
-static void i_prefer_latches(void*) {
+static void i_prefer_latches(void*) {//Corresponds to Lab 1 evaluation outline #6
     //Only check callee-saved registers since when we call osYield() it's allowed to clobber the others
     register uint32_t r4  asm("r4");
     register uint32_t r5  asm("r5");
@@ -577,12 +720,10 @@ static void i_prefer_latches(void*) {
     passed = passed && (r10 == 0xAAAAAAAA);
     passed = passed && (r11 == 0xBBBBBBBB);
 
-    function_complete = true;
-    function_status = passed;
-    osTaskExit();
+    treturn(passed);
 }
 
-static void tid_limits(void*) {
+static void tid_limits(void*) {//Corresponds to Lab 1 evaluation outline #7 and 8
     //Try to create as many spinner tasks as possible
     int ii = 0;//This will contain how much we actually successfully created in the end
     for (ii = 0; ii < (MAX_TASKS * 2); ++ii) {
@@ -594,23 +735,57 @@ static void tid_limits(void*) {
     //Wait for them all to finish
     topple_spinners();
 
-    //We were successful if we could only create MAX_TASKS - 3 tasks
+    //We were successful if we could create EXACTLY MAX_TASKS - 3 tasks, no more, no less
     //(Since the null task, the test_function_manager task, and this task take up 3 TIDs)
-    function_complete = true;
-    function_status   = ii == (MAX_TASKS - 3);
-    osTaskExit();
+    treturn(ii == (MAX_TASKS - 3));
 }
 
-static void reincarnation(void*) {
+static void tid_uniqueness(void*) {
+    //Create the maximum amount of spinner tasks we possibly can
+    int tid_counters[MAX_TASKS];
+    memset(tid_counters, 0, sizeof(tid_counters));
+    for (int ii = 0; ii < (MAX_TASKS - 3); ++ii) {
+        task_t tid = beyblade_let_it_rip();
+
+        //Avoid writing to tid_counters out of bounds
+        if (tid >= MAX_TASKS) {
+            tprintf("TID %d was assigned to a task, which is >= MAX_TASKS!", tid);
+            treturn(false);
+        }
+
+        ++tid_counters[tid];
+    }
+
+    //Wait for them all to finish
+    //No TIDs should get reused since we don't `topple` the spinners until this call
+    topple_spinners();
+
+    //Ensure none of them got TID 0
+    if (tid_counters[0]) {
+        tprintf("One or more of the tasks were assigned TID 0, or the stack allocation failed!");
+        treturn(false);
+    }
+
+    //Ensure all TIDs were unique
+    for (int ii = 1; ii < MAX_TASKS; ++ii) {
+        if (tid_counters[ii] > 1) {
+            tprintf("TID %d was assigned to more than one task!", ii);
+            treturn(false);
+        }
+    }
+
+    //If we made it here, we're good!
+    treturn(true);
+}
+
+static void reincarnation(void*) {//Corresponds to Lab 1 evaluation outline #11
     static volatile size_t number_of_lives = 9;//Lol
     tprintf("I'm alive! I have %u lives left!", number_of_lives);
 
     if (number_of_lives == 0) {
         tprintf("I can't afford life insurance anymore! NOOOOO!!!");
         tprintf("(Test passed!)");
-        function_complete   = true;
-        function_status     = true;
-        osTaskExit();
+        treturn(true);
     }
 
     tprintf("Let me just make sure I have life insurance...");
@@ -622,9 +797,7 @@ static void reincarnation(void*) {
     if (osCreateTask(&task) != RTX_OK) {
         tprintf("The premiums are way to high! I can't afford this!");
         tprintf("(Failed to create a new task!)");
-        function_complete = true;
-        function_status = false;
-        osTaskExit();
+        treturn(false);
     }
 
     --number_of_lives;
@@ -646,7 +819,7 @@ static void insanity_helper(void*) {
     osTaskExit();
 }
 
-static void insanity(void*) {
+static void insanity(void*) {//Corresponds to Lab 1 evaluation outline #10, and also just a really hard test
     tprintf("I have a bunch of friends who are going to say hello!");
 
     function_status = true;//The helpers may set this to false if the bad things happen
@@ -674,10 +847,11 @@ static void insanity(void*) {
 
     tprintf("And goodbye!");
     function_complete = true;
+    //function_status potentially set to false by the helpers
     osTaskExit();
 }
 
-static void greedy(void*) {
+static void greedy(void*) {//Corresponds to Lab 1 evaluation outline #9
     tprintf("GIVE ME ALL OF THE STACK SPACE!");
 
     TCB task;
@@ -687,9 +861,7 @@ static void greedy(void*) {
     if (osCreateTask(&task) == RTX_OK) {
         tprintf("Well I didn't expect that to work...");
         tprintf("(Test failed!)");
-        function_complete   = true;
-        function_status     = false;
-        osTaskExit();
+        treturn(false);
     }
 
     tprintf("FOILED AGAIN! I need to work on my money (stack?) laundering skills...");
@@ -703,17 +875,13 @@ static void greedy(void*) {
         if (osCreateTask(&task) != RTX_OK) {
             tprintf("Nope! Whelp, guess I'm off to federal prison!");
             tprintf("(Test passed!)");
-            function_complete   = true;
-            function_status     = true;
-            osTaskExit();
+            treturn(true);
         }
     }
 
     tprintf("ALL OF YOUR STACK, NO, ALL OF YOUR MEMORY IS MINE! MWAHAHAHAHA!!!!!!");
     tprintf("(Test failed!)");
-    function_complete = true;
-    function_status   = false;
-    osTaskExit();
+    treturn(false);
 }
 
 /*
