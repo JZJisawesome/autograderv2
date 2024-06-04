@@ -191,7 +191,7 @@ int main(void) {
     wprintf("Note that a base level of functionality is required in order to run the autograder");
     wprintf("to completion without crashing. Even if you can't get that far right away,");
     wprintf("as you make progress you'll get further and further through the autograder");
-    wprintf("code, which can be a great way to guage your progress in and of itself!");
+    wprintf("code, which can be a great way to gauge your progress in and of itself!");
     wprintf("Cheers and best of luck. Let's get into it! - \x1b[95mJZJ\r\n");
 
     //Getting into it...
