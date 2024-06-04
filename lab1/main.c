@@ -222,10 +222,10 @@ int main(void) {
     }
 
     //Privileged test #4
-    if (getTID() != 0) {
-        rprintf("    getTID() should return 0 when called from a privileged context!");
+    if (osGetTID() != 0) {
+        rprintf("    osGetTID() should return 0 when called from a privileged context!");
     } else {
-        gprintf("    Good pre-start getTID() behaviour!");
+        gprintf("    Good pre-start osGetTID() behaviour!");
         ++num_passed;
     }
 
@@ -268,10 +268,10 @@ int main(void) {
     print_score_so_far();
     
     //Privileged test #8
-    if (getTID() != 0) {
-        rprintf("    getTID() should return 0 when called from a privileged context!");
+    if (osGetTID() != 0) {
+        rprintf("    osGetTID() should return 0 when called from a privileged context!");
     } else {
-        gprintf("    getTID() still behaving as expected after init!");
+        gprintf("    osGetTID() still behaving as expected after init!");
         ++num_passed;
     }
 
@@ -870,7 +870,7 @@ static void reincarnation(void*) {//Corresponds to Lab 1 evaluation outline #11
 }
 
 static void insanity_helper(void*) {
-    task_t tid = getTID();
+    task_t tid = osGetTID();
     tprintf("    Hello there from TID %u!", tid);
 
     if (tid == 0) {
