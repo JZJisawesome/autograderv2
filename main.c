@@ -244,7 +244,7 @@ int main(void) {
 
     //Privileged test #6
     bool task_info_passed = true;
-    for (int ii = 0; ii < MAX_TASKS; ++ii) {
+    for (task_t ii = 0; ii < MAX_TASKS; ++ii) {
         TCB task_info;
         memset(&task_info, 0, sizeof(TCB));
         if (osTaskInfo((task_t)ii, &task_info) != RTX_ERR) {
@@ -337,10 +337,22 @@ int main(void) {
 
     //Privileged test #14
     task_info_passed = true;
-    for (int ii = 0; ii < MAX_TASKS; ++ii) {
+    for (task_t ii = 0; ii < MAX_TASKS; ++ii) {
         TCB task_info;
         memset(&task_info, 0, sizeof(TCB));
         if (osTaskInfo((task_t)ii, &task_info) != RTX_ERR) {
+            if (ii == TID_NULL) {//NULL task special case, see Piazza #101
+                if (!task_info.ptask) {
+                    yprintf("    (osTaskInfo() reporting NULL ptask for the NULL task, maybe this is bad?)");
+                }
+
+                if (task_info.stack_size < STACK_SIZE) {
+                    yprintf("    (osTaskInfo() weird stack size for the NULL task, maybe this is bad?)");
+                }
+
+                continue;
+            }
+
             rprintf("    osTaskInfo() should return RTX_ERR since no tasks exist yet!");
             task_info_passed = false;
             break;
@@ -381,6 +393,18 @@ int main(void) {
         TCB task_info;
         memset(&task_info, 0, sizeof(TCB));
         if (osTaskInfo(ii, &task_info) != RTX_ERR) {
+            if (ii == TID_NULL) {//NULL task special case, see Piazza #101
+                if (!task_info.ptask) {
+                    yprintf("    (osTaskInfo() reporting NULL ptask for the NULL task, maybe this is bad?)");
+                }
+
+                if (task_info.stack_size < STACK_SIZE) {
+                    yprintf("    (osTaskInfo() weird stack size for the NULL task, maybe this is bad?)");
+                }
+
+                continue;
+            }
+
             if (ii == test_function_manager_task.tid) {//The task we created
                 //Corresponds to Lab 1 evaluation outline #1
                 if (task_info.ptask != test_function_manager) {
