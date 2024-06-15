@@ -34,7 +34,7 @@
     X(tid_uniqueness,               STACK_SIZE, 1,  "Ensure the same TID isn't used for two tasks",                 "JZJ") \
     X(reincarnation,                STACK_SIZE, 1,  "A task whose last act is to recreate itself",                  "JZJ") \
     X(insanity,                     0x400,      1,  "This is a tough one, but you can do it!",                      "JZJ") \
-    X(greedy,                       STACK_SIZE, 1,  "Stack exaustion test. This test should come last.",            "JZJ")
+    X(greedy,                       STACK_SIZE, 1,  "Stack exhaustion test. This test should come last.",            "JZJ")
 //TODO We can always use more testcases!
 
 //Bonus tests (not required to support these)!
@@ -123,7 +123,7 @@ static void print_score_so_far(void);
 
 static void test_function_manager(void*);
 
-//Spinning helper task infastructure that's useful for several tests
+//Spinning helper task infrastructure that's useful for several tests
 static void     spinner(void*);//Spins while osYield()ing until it "topples". Used by a few tests
 static void     topple_spinners(void);//Waits for spinners to exit
 static task_t   beyblade_let_it_rip(void);//Does anyone remember this show? Kinda just a marketing stunt to sell spinning tops...
@@ -233,7 +233,7 @@ int main(void) {
     if (osGetTID() != 0) {
         rprintf("    osGetTID() should return 0 when called from a privileged context!");
     } else {
-        gprintf("    Good pre-start osGetTID() behaviour!");
+        gprintf("    Good pre-start osGetTID() behavior!");
         ++num_passed;
     }
 
@@ -681,7 +681,7 @@ static void sanity(void*) {
 }
 
 static void eternalprintf(void*) {
-    //Is the task environent robust enough to support calling printf()?
+    //Is the task environment robust enough to support calling printf()?
     //Almost certainly it is at this point if you're successfully running the test_manager_function(),
     //but hey, can you call printf from more than one task?
     for (int ii = 0; ii < 10; ++ii) {
