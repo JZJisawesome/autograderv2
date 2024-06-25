@@ -18,13 +18,15 @@
 #define LAB_NUMBER 2
 //#define LAB_NUMBER 3
 
-#define NUM_TEST_FUNCTIONS 13
+#define NUM_TEST_FUNCTIONS 15
 
 //X macros are magical! :)
 //Order: function name, stack size, minimum lab number required, description string, author string
 #define TEST_FUNCTIONS \
     X(sanity,                       STACK_SIZE, 1,  "Basic sanity test",                                            "JZJ") \
     X(eternalprintf,                STACK_SIZE, 1,  "Group 13's first testcase. No idea why that's the name...",    "JZJ") \
+    X(lab2allocsanity,              STACK_SIZE, 2,  "Allocates some memory!",                                       "JZJ") \
+    X(lab2deallocsanity,            STACK_SIZE, 2,  "Deallocates lab2allocsanity's memory!",                        "JZJ") \
     X(reject_bad_tcbs,              STACK_SIZE, 1,  "You shouldn't create tasks from bad TCBs, it's not healthy!",  "JZJ") \
     X(stack_reuse,                  STACK_SIZE, 1,  "Basic stack reuse test",                                       "JZJ") \
     X(square_batman,                STACK_SIZE, 1,  "Round robin test",                                             "JZJ") \
@@ -181,9 +183,10 @@ static volatile size_t  spin_count = 0;
 static volatile bool    topple     = false;
 
 //Testcase-specific statics
-static volatile int     square_batman_counters[NUM_SIDEKICKS] = {0, 0, 0, 0, 0};
-static volatile int     test4pain_counters[NUM_SIDEKICKS] = {0, 0, 0};
-static volatile size_t  insanity_counter = 0;
+static volatile int         square_batman_counters[NUM_SIDEKICKS] = {0, 0, 0, 0, 0};
+static volatile int         test4pain_counters[NUM_SIDEKICKS] = {0, 0, 0};
+static volatile size_t      insanity_counter = 0;
+static volatile uint32_t*   lab2sanity = NULL;
 
 /* ------------------------------------------------------------------------------------------------
  * Function Implementations
@@ -692,6 +695,41 @@ static void eternalprintf(void*) {
     }
 
     osYield();//For kicks
+
+    treturn(true);
+}
+
+static void lab2allocsanity(void*) {
+    lab2sanity = k_mem_alloc(sizeof(uint32_t));
+    if (lab2sanity == NULL) {
+        tprintf("k_mem_alloc() failed to allocate memory!");
+        treturn(false);
+    }
+    tprintf("Successfully allocated a pointer at 0x%lX", (uint32_t)lab2sanity);
+
+    *lab2sanity = 0x12345678;
+    uint32_t read_data = *lab2sanity;
+    if (read_data != 0x12345678) {
+        tprintf("Failed to read back the data we wrote (likely this is a bad pointer to some IO memory)!");
+        treturn(false);
+    }
+    tprintf("I successfully wrote and read the value 0x%lX!", read_data);
+
+    treturn(true);
+}
+
+static void lab2deallocsanity(void*) {
+    assert(lab2sanity && "lab2allocsanity() must be run before this test!");
+    if (*lab2sanity != 0x12345678) {
+        tprintf("The data we wrote earlier was corrupted!");
+        treturn(false);
+    }
+
+    if (k_mem_dealloc((void*)lab2sanity) != RTX_OK) {
+        tprintf("k_mem_dealloc() failed to deallocate memory!");
+        treturn(false);
+    }
+    lab2sanity = NULL;
 
     treturn(true);
 }
