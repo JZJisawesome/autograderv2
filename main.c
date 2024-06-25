@@ -14,8 +14,8 @@
  * --------------------------------------------------------------------------------------------- */
 
 //Change this to the lab you want to test for
-#define LAB_NUMBER 1
-//#define LAB_NUMBER 2
+//#define LAB_NUMBER 1
+#define LAB_NUMBER 2
 //#define LAB_NUMBER 3
 
 #define NUM_TEST_FUNCTIONS 13
