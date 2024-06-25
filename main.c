@@ -18,7 +18,7 @@
 #define LAB_NUMBER 2
 //#define LAB_NUMBER 3
 
-#define NUM_TEST_FUNCTIONS 15
+#define NUM_TEST_FUNCTIONS 16
 
 //X macros are magical! :)
 //Order: function name, stack size, minimum lab number required, description string, author string
@@ -27,6 +27,7 @@
     X(eternalprintf,                STACK_SIZE, 1,  "Group 13's first testcase. No idea why that's the name...",    "JZJ") \
     X(lab2allocsanity,              STACK_SIZE, 2,  "Allocates some memory!",                                       "JZJ") \
     X(lab2deallocsanity,            STACK_SIZE, 2,  "Deallocates lab2allocsanity's memory!",                        "JZJ") \
+    X(free_me_from_my_pain,         STACK_SIZE, 2,  "Attempts to free you from existence with DEADLY pointers!",    "JZJ") \
     X(reject_bad_tcbs,              STACK_SIZE, 1,  "You shouldn't create tasks from bad TCBs, it's not healthy!",  "JZJ") \
     X(stack_reuse,                  STACK_SIZE, 1,  "Basic stack reuse test",                                       "JZJ") \
     X(square_batman,                STACK_SIZE, 1,  "Round robin test",                                             "JZJ") \
@@ -696,6 +697,22 @@ static void eternalprintf(void*) {
 
     osYield();//For kicks
 
+    treturn(true);
+}
+
+static void free_me_from_my_pain(void*) {
+    if (k_mem_dealloc(NULL) != RTX_ERR) {
+        tprintf("k_mem_dealloc() should return RTX_ERR when deallocating a NULL pointer!");
+        treturn(false);
+    }
+
+    uint8_t zero_buffer[33];//Your canary shouldn't be all 0s, so you should detect this
+    memset(zero_buffer, 0, sizeof(zero_buffer));
+    if (k_mem_dealloc(&zero_buffer[32]) != RTX_ERR) {
+        tprintf("k_mem_dealloc() should check a block's canary before deallocating it!");
+        treturn(false);
+    }
+    
     treturn(true);
 }
 
