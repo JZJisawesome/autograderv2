@@ -18,7 +18,7 @@
 //#define LAB_NUMBER 2
 //#define LAB_NUMBER 3
 
-#define NUM_TEST_FUNCTIONS 12
+#define NUM_TEST_FUNCTIONS 13
 
 //X macros are magical! :)
 //Order: function name, stack size, minimum lab number required, description string, author string
@@ -28,6 +28,7 @@
     X(reject_bad_tcbs,              STACK_SIZE, 1,  "You shouldn't create tasks from bad TCBs, it's not healthy!",  "JZJ") \
     X(stack_reuse,                  STACK_SIZE, 1,  "Basic stack reuse test",                                       "JZJ") \
     X(square_batman,                STACK_SIZE, 1,  "Round robin test",                                             "JZJ") \
+    X(test4ispain,                  STACK_SIZE, 1,  "WHYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY :(",                    "JZJ") \
     X(odds_are_stacked_against_you, STACK_SIZE, 1,  "Stack integrity test across osYield()",                        "JZJ") \
     X(i_prefer_latches,             STACK_SIZE, 1,  "Register integrity test across osYield()",                     "JZJ") \
     X(tid_limits,                   STACK_SIZE, 1,  "Maximum number of TIDs test",                                  "JZJ") \
@@ -129,6 +130,7 @@ static void     topple_spinners(void);//Waits for spinners to exit
 static task_t   beyblade_let_it_rip(void);//Does anyone remember this show? Kinda just a marketing stunt to sell spinning tops...
 
 static void square_batman_helper(void*);
+static void test4ispain_helper(void*);
 static void insanity_helper(void*);
 
 //Too bad these couldn't be part of insanity
@@ -179,7 +181,8 @@ static volatile size_t  spin_count = 0;
 static volatile bool    topple     = false;
 
 //Testcase-specific statics
-static volatile int     square_batman_counters[NUM_SIDEKICKS] = {0, 0, 0};
+static volatile int     square_batman_counters[NUM_SIDEKICKS] = {0, 0, 0, 0, 0};
+static volatile int     test4pain_counters[NUM_SIDEKICKS] = {0, 0, 0};
 static volatile size_t  insanity_counter = 0;
 
 /* ------------------------------------------------------------------------------------------------
@@ -844,6 +847,116 @@ static void square_batman(void*) {//Corresponds to Lab 1 evaluation outline #3 a
 
     //Success! Yield a few times just to ensure the Robins exit
     tprintf("Your Robins are perfectly round!");
+    osYield();
+    osYield();
+    osYield();
+    treturn(true);
+}
+
+static void test4ispain_helper(void*) {
+    //Choose a counter for the test
+    int my_counter = 0;
+    for (int ii = 0; ii < NUM_SIDEKICKS; ++ii) {
+        if (test4pain_counters[ii] == 0) {
+            my_counter              = ii;
+            test4pain_counters[ii]  = 1;
+            break;
+        }
+    }
+
+    //Wait for all tasks to be ready
+    while (test4pain_counters[2] == 0) {
+        osYield();
+    }
+
+    tprintf("I am task #%d!", my_counter);
+
+    for (int ii = 1; ii < 10; ++ii) {
+        tprintf(
+            "Incrementing counter %d from %d to %d",
+            my_counter,
+            test4pain_counters[my_counter],
+            test4pain_counters[my_counter] + 1
+        );
+        ++test4pain_counters[my_counter];
+
+        if ((ii == 5) && (my_counter == 1)) {
+            tprintf("Task %d is exiting early...", my_counter);
+            osTaskExit();
+        }
+
+        osYield();
+    }
+
+    osTaskExit();
+}
+
+static void test4ispain(void*) {
+    tprintf("NOTE: Neither this test nor the square_batman() one is seemingly");
+    tprintf("able to replicate my team's failure of the real `test4`.");
+    tprintf("We had to create a seperate file to replicate this behaviour.");
+    tprintf("Maybe that's due to the other tasks that are present when the");
+    tprintf("helpers are running that obscures the issue?");
+    tprintf("Check out `lab1_test4ish.c` for what did work for us.");
+    tprintf("YOU'VE BEEN WARNED");
+
+    //Setup test helpers
+    TCB helper_task;
+    memset(&helper_task, 0, sizeof(TCB));
+    helper_task.ptask      = test4ispain_helper;
+    helper_task.stack_size = STACK_SIZE;
+
+    for (int ii = 0; ii < 3; ++ii) {
+        if (osCreateTask(&helper_task) != RTX_OK) {
+            tprintf(":(");
+            treturn(false);
+        }
+    }
+
+    //Wait for all tasks to be ready
+    while (test4pain_counters[2] == 0) {
+        osYield();
+    }
+
+    //The entire is complete when all counters are 10
+    bool all_counters_are_10 = false;
+    while (!all_counters_are_10) {
+        all_counters_are_10 = true;
+
+        int minimum = 11;
+        int maximum = 0;
+        for (int ii = 0; ii < 3; ++ii) {
+            if (ii == 1) {//Ignore task 2
+                continue;
+            }
+
+            if (test4pain_counters[ii] != 10) {
+                all_counters_are_10 = false;
+            }
+
+            if (test4pain_counters[ii] < minimum) {
+                minimum = test4pain_counters[ii];
+            }
+
+            if (test4pain_counters[ii] > maximum) {
+                maximum = test4pain_counters[ii];
+            }
+        }
+
+        int difference = maximum - minimum;
+        if (difference > 1) {
+            tprintf("Test 4 is really a pain!");
+            tprintf("The difference between the highest and lowest counter is %d", difference);
+            for (int ii = 0; ii < 3; ++ii) {
+                tprintf("    Counter #%d: %d", ii, test4pain_counters[ii]);
+            }
+            treturn(false);
+        }
+
+        osYield();
+    }
+
+    tprintf("Good luck!");
     osYield();
     osYield();
     osYield();
