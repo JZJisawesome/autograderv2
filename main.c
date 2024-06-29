@@ -39,12 +39,14 @@
     X(reincarnation,                STACK_SIZE, 1,  "A task whose last act is to recreate itself",                  "JZJ") \
     X(insanity,                     0x400,      1,  "This is a tough one, but you can do it!",                      "JZJ") \
     X(greedy,                       STACK_SIZE, 1,  "Stack exaustion test. This test should come last.",            "JZJ")
+//TODO comprehensive extfrag test
+//TODO stress test for alloc and dealloc
 //TODO We can always use more testcases!
 
 //Bonus tests (not required to support these)!
 //X(task_wrapper_test,            STACK_SIZE,     "What happens if a task's function returns?",                   "JZJ")
 
-#define NUM_PRIVILEGED_TESTS 18
+#define NUM_PRIVILEGED_TESTS 20
 
 #define NUM_SIDEKICKS   5
 #define EVIL_ROBIN      NUM_SIDEKICKS / 2
@@ -311,17 +313,43 @@ int main(void) {
     bprintf("    Skipping another k_mem_alloc() test since it's not required for Lab 1...");
     ++num_skipped;
 #endif
+
+    //Privileged test #10
+#if LAB_NUMBER >= 2
+    if (k_mem_dealloc(NULL) != NULL) {
+        rprintf("    k_mem_dealloc() should fail before (a successful) k_mem_init()!");
+    } else {
+        gprintf("    k_mem_dealloc() is behaving as expected before k_mem_init()!");
+        ++num_passed;
+    }
+#else
+    bprintf("    Skipping a k_mem_dealloc() test since it's not required for Lab 1...");
+    ++num_skipped;
+#endif
+
+    //Privileged test #11
+#if LAB_NUMBER >= 2
+    if (k_mem_count_extfrag(100000) != 0) {
+        rprintf("    k_mem_count_extfrag() should fail before (a successful) k_mem_init()!");
+    } else {
+        gprintf("    k_mem_count_extfrag() is behaving as expected before k_mem_init()!");
+        ++num_passed;
+    }
+#else
+    bprintf("    Skipping a k_mem_count_extfrag() test since it's not required for Lab 1...");
+    ++num_skipped;
+#endif
     
     //TODO more tests pre-init
 
-    //Privileged test #10
+    //Privileged test #12
     wprintf("Initializing the kernel...");
     osKernelInit();//Corresponds to Lab 1 evaluation outline #0
     ++num_passed;
     gprintf("Alrighty, the kernel is initialized!\x1b[0m\x1b[1m Let's see how you're doing so far...");
     print_score_so_far();
     
-    //Privileged test #11
+    //Privileged test #13
     if (osGetTID() != 0) {
         rprintf("    osGetTID() should return 0 when called from a privileged context!");
     } else {
@@ -329,7 +357,7 @@ int main(void) {
         ++num_passed;
     }
 
-    //Privileged test #12
+    //Privileged test #14
     if (osTaskExit() != RTX_ERR) {
         rprintf("    osTaskExit() should return RTX_ERR when called from a privileged context!");
     } else {
@@ -337,12 +365,12 @@ int main(void) {
         ++num_passed;
     }
 
-    //Privileged test #13
+    //Privileged test #15
     osYield();
     ++num_passed;
     gprintf("    You survived ANOTHER osYield before the kernel started!");
 
-    //Privileged test #14
+    //Privileged test #16
     task_info_passed = true;
     for (task_t ii = 0; ii < MAX_TASKS; ++ii) {
         TCB task_info;
@@ -378,7 +406,7 @@ int main(void) {
         ++num_passed;
     }
 
-    //Privileged test #15
+    //Privileged test #17
     TCB test_function_manager_task;
     memset(&test_function_manager_task, 0, sizeof(TCB));
     test_function_manager_task.ptask      = test_function_manager;
@@ -394,7 +422,7 @@ int main(void) {
         ++num_passed;
     }
 
-    //Privileged test #16
+    //Privileged test #18
     task_info_passed = true;
     for (task_t ii = 0; ii < MAX_TASKS; ++ii) {
         TCB task_info;
@@ -447,7 +475,7 @@ int main(void) {
         ++num_passed;
     }
 
-    //Privileged test #17
+    //Privileged test #19
 #if LAB_NUMBER >= 2
     if (k_mem_init() != RTX_OK) {//FIXME what about testing if k_mem_init() works if called from a user task?
         rprintf("    k_mem_init() failed!");
@@ -460,7 +488,7 @@ int main(void) {
     ++num_skipped;
 #endif
 
-    //Privileged test #18
+    //Privileged test #20
 #if LAB_NUMBER >= 2
     if (k_mem_init() == RTX_OK) {
         rprintf("    k_mem_init() should fail if called twice!");
@@ -470,6 +498,19 @@ int main(void) {
     }
 #else
     bprintf("    Skipping another k_mem_init() test since it's not required for Lab 1...");
+    ++num_skipped;
+#endif
+
+    //Privileged test #21
+#if LAB_NUMBER >= 2
+    if (k_mem_count_extfrag(100000) != 1) {
+        rprintf("    k_mem_count_extfrag() should be 1 right after k_mem_init()!");
+    } else {
+        gprintf("    k_mem_count_extfrag() is behaving as expected before k_mem_init()!");
+        ++num_passed;
+    }
+#else
+    bprintf("    Skipping a k_mem_count_extfrag() test since it's not required for Lab 1...");
     ++num_skipped;
 #endif
 
