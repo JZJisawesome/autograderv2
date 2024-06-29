@@ -39,6 +39,7 @@
     X(reincarnation,                STACK_SIZE, 1,  "A task whose last act is to recreate itself",                  "JZJ") \
     X(insanity,                     0x400,      1,  "This is a tough one, but you can do it!",                      "JZJ") \
     X(greedy,                       STACK_SIZE, 1,  "Stack exaustion test. This test should come last.",            "JZJ")
+//X(kachow,                       STACK_SIZE, 2,  "Gotta go fast! Wait no that's a different franchise.",         "JZJ") \
 //TODO comprehensive extfrag test
 //TODO stress test for alloc and dealloc
 //TODO We can always use more testcases!
@@ -46,7 +47,9 @@
 //Bonus tests (not required to support these)!
 //X(task_wrapper_test,            STACK_SIZE,     "What happens if a task's function returns?",                   "JZJ")
 
-#define NUM_PRIVILEGED_TESTS 20
+#define NUM_PRIVILEGED_TESTS 21
+
+#define KACHOW_ITERATIONS 1000000
 
 #define NUM_SIDEKICKS   5
 #define EVIL_ROBIN      NUM_SIDEKICKS / 2
@@ -199,6 +202,8 @@ int main(void) {
     //Do things that the STM32CubeIDE does
     HAL_Init();
     SystemClock_Config();
+    HAL_NVIC_SetPriorityGrouping(NVIC_PRIORITYGROUP_0);
+    HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
     MX_GPIO_Init();
     MX_USART2_UART_Init();
 
@@ -316,7 +321,7 @@ int main(void) {
 
     //Privileged test #10
 #if LAB_NUMBER >= 2
-    if (k_mem_dealloc(NULL) != NULL) {
+    if (k_mem_dealloc(NULL) != RTX_ERR) {
         rprintf("    k_mem_dealloc() should fail before (a successful) k_mem_init()!");
     } else {
         gprintf("    k_mem_dealloc() is behaving as expected before k_mem_init()!");
@@ -754,6 +759,83 @@ static void free_me_from_my_pain(void*) {
         treturn(false);
     }
     
+    treturn(true);
+}
+
+static void kachow(void*) {
+    //Volatile is useful for inhibiting optimizations for benchmarking
+    //FIXME why do the HAL_GetTick numbers not make sense?
+    /*
+
+    uint64_t rand_start_time = HAL_GetTick();
+    for (int ii = 0; ii < KACHOW_ITERATIONS; ++ii) {
+        volatile uint32_t size1 = (uint32_t)(rand() % 4096);
+        volatile uint32_t size2 = (uint32_t)(rand() % 4096);
+        volatile uint32_t size3 = (uint32_t)(rand() % 4096);
+        volatile uint32_t size4 = (uint32_t)(rand() % 4096);
+        volatile uint32_t size5 = (uint32_t)(rand() % 4096);
+    }
+    uint64_t rand_end_time = HAL_GetTick();
+    uint64_t total_rand_time = rand_end_time - rand_start_time;
+    tprintf("rand_start_time: %lu", rand_start_time);
+    tprintf("rand_end_time: %lu", rand_end_time);
+    tprintf("rand() takes %lums to generate a random number < 4096", total_rand_time);
+    uint64_t average_rand_time = (total_rand_time * 1000000) / (KACHOW_ITERATIONS * 5);
+    tprintf("rand() takes an average of %luns to generate a random number < 4096", average_rand_time);
+    tprintf("This will be used to adjust future calculations");
+
+    uint64_t reference_start_time = HAL_GetTick();
+    for (int ii = 0; ii < KACHOW_ITERATIONS; ++ii) {
+        //Some fancy pattern of mallocs and frees
+        volatile uint32_t size1 = (uint32_t)(rand() % 4096);
+        volatile uint32_t size2 = (uint32_t)(rand() % 4096);
+        volatile uint32_t size3 = (uint32_t)(rand() % 4096);
+        volatile uint32_t size4 = (uint32_t)(rand() % 4096);
+        volatile uint32_t size5 = (uint32_t)(rand() % 4096);
+        volatile int* ptr1 = malloc(size1);
+        volatile int* ptr2 = malloc(size2);
+        *ptr1 = 1;
+        *ptr2 = 2;
+        free(ptr1);
+        volatile int* ptr3 = malloc(size3);
+        volatile int* ptr4 = malloc(size4);
+        *ptr3 = 3;
+        *ptr4 = 4;
+        free(ptr2);
+        free(ptr4);
+        volatile int* ptr5 = malloc(size5);
+        *ptr5 = 3;
+        free(ptr5);
+        free(ptr3);
+    }
+    uint64_t total_reference_time = HAL_GetTick() - reference_start_time;
+    tprintf("System malloc/free takes %lums to allocate and deallocate < 4096 bytes", total_reference_time);
+    uint64_t average_reference_time = (total_reference_time * 1000000) / (KACHOW_ITERATIONS * 5);
+    tprintf("System malloc/free takes an average of %luns to allocate and deallocate < 4096 bytes", average_reference_time);
+    */
+
+    /*
+    uint32_t your_start_time = HAL_GetTick();
+    for (int ii = 0; ii < KACHOW_ITERATIONS; ++ii) {
+        //Same pattern
+        void* ptr1 = k_mem_alloc(rand() % 4096);
+        void* ptr2 = k_mem_alloc(rand() % 4096);
+        k_mem_dealloc(ptr1);
+        void* ptr3 = k_mem_alloc(rand() % 4096);
+        void* ptr4 = k_mem_alloc(rand() % 4096);
+        k_mem_dealloc(ptr2);
+        k_mem_dealloc(ptr4);
+        void* ptr5 = k_mem_alloc(rand() % 4096);
+        k_mem_dealloc(ptr5);
+        k_mem_dealloc(ptr3);
+    }
+    uint32_t your_total_time = HAL_GetTick() - your_start_time;
+    uint32_t your_average_time = (your_total_time * 1000000) / (KACHOW_ITERATIONS * 5);
+    tprintf("k_mem_{de}alloc takes an average of %luns to allocate and deallocate < 4096 bytes", your_average_time);
+
+    tprintf("You passed if you're at least half as fast as the system malloc/free!");
+    treturn(your_average_time <= (average_reference_malloc_time * 2));
+    */
     treturn(true);
 }
 
