@@ -25,8 +25,7 @@
 #define TEST_FUNCTIONS \
     X(sanity,                       STACK_SIZE, 1,  "Basic sanity test",                                            "JZJ") \
     X(eternalprintf,                STACK_SIZE, 1,  "Group 13's first testcase. No idea why that's the name...",    "JZJ") \
-    X(lab2allocsanity,              STACK_SIZE, 2,  "Allocates some memory!",                                       "JZJ") \
-    X(lab2deallocsanity,            STACK_SIZE, 2,  "Deallocates lab2allocsanity's memory!",                        "JZJ") \
+    X(lab2sanity,                   STACK_SIZE, 2,  "Allocates and deallocates some memory!",                       "JZJ") \
     X(free_me_from_my_pain,         STACK_SIZE, 2,  "Attempts to free you from existence with DEADLY pointers!",    "JZJ") \
     X(reject_bad_tcbs,              STACK_SIZE, 1,  "You shouldn't create tasks from bad TCBs, it's not healthy!",  "JZJ") \
     X(stack_reuse,                  STACK_SIZE, 1,  "Basic stack reuse test",                                       "JZJ") \
@@ -38,7 +37,8 @@
     X(tid_uniqueness,               STACK_SIZE, 1,  "Ensure the same TID isn't used for two tasks",                 "JZJ") \
     X(reincarnation,                STACK_SIZE, 1,  "A task whose last act is to recreate itself",                  "JZJ") \
     X(insanity,                     0x400,      1,  "This is a tough one, but you can do it!",                      "JZJ") \
-    X(greedy,                       STACK_SIZE, 1,  "Stack exaustion test. This test should come last.",            "JZJ")
+    X(insanity2,                    0x400,      2,  "Your heap will weep!",                                         "JZJ") \
+    X(greedy,                       STACK_SIZE, 1,  "Stack exaustion test. This test should come near last.",       "JZJ") \
 //X(kachow,                       STACK_SIZE, 2,  "Gotta go fast! Wait no that's a different franchise.",         "JZJ") \
 //TODO comprehensive extfrag test
 //TODO stress test for alloc and dealloc
@@ -192,7 +192,6 @@ static volatile bool    topple     = false;
 static volatile int         square_batman_counters[NUM_SIDEKICKS] = {0, 0, 0, 0, 0};
 static volatile int         test4pain_counters[NUM_SIDEKICKS] = {0, 0, 0};
 static volatile size_t      insanity_counter = 0;
-static volatile uint32_t*   lab2sanity = NULL;
 
 /* ------------------------------------------------------------------------------------------------
  * Function Implementations
@@ -511,7 +510,7 @@ int main(void) {
     if (k_mem_count_extfrag(100000) != 1) {
         rprintf("    k_mem_count_extfrag() should be 1 right after k_mem_init()!");
     } else {
-        gprintf("    k_mem_count_extfrag() is behaving as expected before k_mem_init()!");
+        gprintf("    k_mem_count_extfrag() is behaving as expected after k_mem_init()!");
         ++num_passed;
     }
 #else
@@ -746,6 +745,31 @@ static void eternalprintf(void*) {
     treturn(true);
 }
 
+static void lab2sanity(void*) {
+    volatile uint32_t* ptr = k_mem_alloc(sizeof(uint32_t));
+    if (ptr == NULL) {
+        tprintf("k_mem_alloc() failed to allocate memory!");
+        treturn(false);
+    }
+    tprintf("Successfully allocated a pointer at 0x%lX", (uint32_t)ptr);
+
+    *ptr = 0x12345678;
+    uint32_t read_data = *ptr;
+    if (read_data != 0x12345678) {
+        tprintf("Failed to read back the data we wrote (likely this is a bad pointer to some IO memory)!");
+        treturn(false);
+    }
+    tprintf("I successfully wrote and read the value 0x%lX!", read_data);
+
+    if (k_mem_dealloc((void*)ptr) != RTX_OK) {
+        tprintf("k_mem_dealloc() failed to deallocate memory!");
+        treturn(false);
+    }
+    ptr = NULL;
+
+    treturn(true);
+}
+
 static void free_me_from_my_pain(void*) {
     if (k_mem_dealloc(NULL) != RTX_ERR) {
         tprintf("k_mem_dealloc() should return RTX_ERR when deallocating a NULL pointer!");
@@ -839,39 +863,160 @@ static void kachow(void*) {
     treturn(true);
 }
 
-static void lab2allocsanity(void*) {
-    lab2sanity = k_mem_alloc(sizeof(uint32_t));
-    if (lab2sanity == NULL) {
-        tprintf("k_mem_alloc() failed to allocate memory!");
-        treturn(false);
+static void insanity2(void*) {
+    size_t      sizes[INSANITY_LEVEL];
+    uint8_t*    allocations[INSANITY_LEVEL];
+
+    //Only allocating then only deallocating, same orders for both
+    tprintf("In-order alloc and dealloc...");
+    for (size_t ii = 0; ii < INSANITY_LEVEL; ++ii) {
+        bool no_problems = true;
+        size_t num_allocs       = (rand() % (ii + 2)) + 1;
+        size_t max_alloc_size   = 32768 / (num_allocs + 1);
+
+        for (size_t jj = 0; jj < num_allocs; ++jj) {
+            sizes[jj] = rand() % max_alloc_size;
+            allocations[jj] = k_mem_alloc(sizes[jj]);
+            if (allocations[jj] == NULL) {
+                tprintf("k_mem_alloc() failed to allocate memory!");
+                num_allocs = jj;
+                no_problems = false;//Still try to clean up
+                break;
+            }
+            //Fill the memory with a known pattern
+            memset(allocations[jj], 0xA5, sizes[jj]);
+        }
+
+        for (size_t jj = 0; jj < num_allocs; ++jj) {
+            for (size_t kk = 0; kk < sizes[jj]; ++kk) {
+                if (allocations[jj][kk] != 0xA5) {
+                    tprintf("Memory corruption detected!");
+                    no_problems = false;//Still try to clean up
+                    break;
+                }
+            }
+
+            if (k_mem_dealloc(allocations[jj]) != RTX_OK) {
+                tprintf("k_mem_dealloc() failed to deallocate memory!");
+                //Failure to dealloc is catastrophic, there's no way to clean up!
+                treturn(false);
+            }
+        }
+
+        if (!no_problems) {
+            treturn(false);
+        }
     }
-    tprintf("Successfully allocated a pointer at 0x%lX", (uint32_t)lab2sanity);
 
-    *lab2sanity = 0x12345678;
-    uint32_t read_data = *lab2sanity;
-    if (read_data != 0x12345678) {
-        tprintf("Failed to read back the data we wrote (likely this is a bad pointer to some IO memory)!");
-        treturn(false);
-    }
-    tprintf("I successfully wrote and read the value 0x%lX!", read_data);
-
-    treturn(true);
-}
-
-static void lab2deallocsanity(void*) {
-    assert(lab2sanity && "lab2allocsanity() must be run before this test!");
-    if (*lab2sanity != 0x12345678) {
-        tprintf("The data we wrote earlier was corrupted!");
-        treturn(false);
+    //Only allocating, then only deallocating but out of order
+    tprintf("In-order alloc, OOO dealloc...");
+    bool no_problems = true;
+    memset(allocations, 0, sizeof(uint8_t*) * INSANITY_LEVEL);
+    for (size_t ii = 0; ii < INSANITY_LEVEL; ++ii) {
+        allocations[ii]     = k_mem_alloc(rand() % 50);
+        if (allocations[ii] == NULL) {
+            tprintf("k_mem_alloc() failed to allocate memory!");
+            no_problems = false;
+            break;
+        }
+        *allocations[ii]    = 123;
     }
 
-    if (k_mem_dealloc((void*)lab2sanity) != RTX_OK) {
-        tprintf("k_mem_dealloc() failed to deallocate memory!");
-        treturn(false);
-    }
-    lab2sanity = NULL;
+    for (size_t ii = 0; ii < (INSANITY_LEVEL / 2); ++ii) {
+        size_t random_idx = rand() % INSANITY_LEVEL;
+        while (allocations[random_idx] == NULL) {
+            random_idx = rand() % INSANITY_LEVEL;
+        }
 
-    treturn(true);
+        if (*allocations[random_idx] != 123) {
+            tprintf("Memory corruption detected!");
+            no_problems = false;
+        }
+
+        if (k_mem_dealloc(allocations[random_idx]) != RTX_OK) {
+            printf("k_mem_dealloc() failed to deallocate memory!");
+            //Failure to dealloc is catastrophic, there's no way to clean up!
+            treturn(false);
+        }
+        allocations[random_idx] = NULL;
+    }
+
+    for (size_t ii = 0; ii < INSANITY_LEVEL; ++ii) {
+        if (allocations[ii]) {
+            if (*allocations[ii] != 123) {
+                tprintf("Memory corruption detected!");
+                no_problems = false;
+            }
+            if (k_mem_dealloc(allocations[ii]) != RTX_OK) {
+                printf("k_mem_dealloc() failed to deallocate memory!");
+                treturn(false);
+            }
+            allocations[ii] = NULL;
+        }
+    }
+
+    tprintf("Interesting pattern...");
+    for (int ii = 0; ii < INSANITY_LEVEL; ++ii) {
+        void* ptr1 = k_mem_alloc(rand() % 4096);
+        if (ptr1 == NULL) {
+            tprintf("k_mem_alloc() failed to allocate memory!");
+            treturn(false);
+        }
+        void* ptr2 = k_mem_alloc(rand() % 4096);
+        if (ptr2 == NULL) {
+            tprintf("k_mem_alloc() failed to allocate memory!");
+            treturn(false);
+        }
+        if (k_mem_dealloc(ptr1) == RTX_ERR) {
+            tprintf("k_mem_dealloc() failed to deallocate memory!");
+            treturn(false);
+        }
+        void* ptr3 = k_mem_alloc(rand() % 4096);
+        if (ptr3 == NULL) {
+            tprintf("k_mem_alloc() failed to allocate memory!");
+            treturn(false);
+        }
+        void* ptr4 = k_mem_alloc(rand() % 4096);
+        if (ptr4 == NULL) {
+            tprintf("k_mem_alloc() failed to allocate memory!");
+            treturn(false);
+        }
+        if (k_mem_dealloc(ptr2) == RTX_ERR) {
+            tprintf("k_mem_dealloc() failed to deallocate memory!");
+            treturn(false);
+        }
+        if (k_mem_dealloc(ptr4) == RTX_ERR) {
+            tprintf("k_mem_dealloc() failed to deallocate memory!");
+            treturn(false);
+        }
+        void* ptr5 = k_mem_alloc(rand() % 4096);
+        void* ptr6 = k_mem_alloc(rand() % 4096);
+        void* ptr7 = k_mem_alloc(rand() % 4096);
+        if (ptr5 == NULL) {
+            tprintf("k_mem_alloc() failed to allocate memory!");
+            treturn(false);
+        }
+        if (k_mem_dealloc(ptr5) == RTX_ERR) {
+            tprintf("k_mem_dealloc() failed to deallocate memory!");
+            treturn(false);
+        }
+        if (k_mem_dealloc(ptr3) == RTX_ERR) {
+            tprintf("k_mem_dealloc() failed to deallocate memory!");
+            treturn(false);
+        }
+
+        //Rest of the pattern. If you survive the above you'll probably survive this
+        k_mem_dealloc(ptr6);
+        void* ptr8 = k_mem_alloc(rand() % 4096);
+        k_mem_dealloc(ptr8);
+        k_mem_dealloc(ptr7);
+        void* ptr9  = k_mem_alloc(rand() % 4096);
+        void* ptr10 = k_mem_alloc(rand() % 4096);
+        k_mem_dealloc(ptr10);
+        k_mem_dealloc(ptr9);
+    }
+
+    treturn(no_problems);
 }
 
 static void reject_bad_tcbs(void*) {
