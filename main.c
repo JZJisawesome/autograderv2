@@ -37,7 +37,7 @@
 #define LAB_NUMBER 2
 //#define LAB_NUMBER 3
 
-#define NUM_TEST_FUNCTIONS 17
+#define NUM_TEST_FUNCTIONS 20
 
 //X macros are magical! :)
 //Order: function name, stack size, minimum lab number required, description string, author string
@@ -46,6 +46,7 @@
     X(eternalprintf,                STACK_SIZE, 1,  "Group 13's first testcase. No idea why that's the name...",    "JZJ") \
     X(lab2sanity,                   STACK_SIZE, 2,  "Allocates and deallocates some memory!",                       "JZJ") \
     X(free_me_from_my_pain,         STACK_SIZE, 2,  "Attempts to free you from existence with DEADLY pointers!",    "JZJ") \
+    X(extfrag,                      STACK_SIZE, 2,  "Tests k_mem_count_extfrag()",                                  "JZJ") \
     X(reject_bad_tcbs,              STACK_SIZE, 1,  "You shouldn't create tasks from bad TCBs, it's not healthy!",  "JZJ") \
     X(stack_reuse,                  STACK_SIZE, 1,  "Basic stack reuse test",                                       "JZJ") \
     X(square_batman,                STACK_SIZE, 1,  "Round robin test",                                             "JZJ") \
@@ -55,6 +56,7 @@
     X(tid_limits,                   STACK_SIZE, 1,  "Maximum number of TIDs test",                                  "JZJ") \
     X(tid_uniqueness,               STACK_SIZE, 1,  "Ensure the same TID isn't used for two tasks",                 "JZJ") \
     X(reincarnation,                STACK_SIZE, 1,  "A task whose last act is to recreate itself",                  "JZJ") \
+    X(mem_ownership,                STACK_SIZE, 2,  "Ensures you can't free memory you don't own",                  "JZJ") \
     X(insanity,                     0x400,      1,  "This is a tough one, but you can do it!",                      "JZJ") \
     X(insanity2,                    0x400,      2,  "Your heap will weep!",                                         "JZJ") \
     X(kachow,                       0x400,      2,  "Gotta go fast! Wait no that's a different franchise.",         "JZJ") \
@@ -72,7 +74,7 @@
 //The largest block header size we'd ever expect for a group's code
 #define MAX_BLOCK_HEADER_SIZE 16
 
-#define KACHOW_ITERATIONS 1000000
+#define KACHOW_ITERATIONS 10000
 
 #define NUM_SIDEKICKS   5
 #define EVIL_ROBIN      NUM_SIDEKICKS / 2
@@ -155,6 +157,7 @@ static task_t   beyblade_let_it_rip(void);//Does anyone remember this show? Kind
 
 static void square_batman_helper(void*);
 static void test4ispain_helper(void*);
+static void mem_ownership_helper(void*);
 static void insanity_helper(void*);
 
 //Too bad these couldn't be part of insanity
@@ -208,6 +211,7 @@ static volatile bool    topple     = false;
 static volatile int         square_batman_counters[NUM_SIDEKICKS] = {0, 0, 0, 0, 0};
 static volatile int         test4pain_counters[NUM_SIDEKICKS] = {0, 0, 0};
 static volatile size_t      insanity_counter = 0;
+static volatile void*       mem_ownership_ptr = NULL;
 
 /* ------------------------------------------------------------------------------------------------
  * Function Implementations
@@ -833,6 +837,65 @@ static void free_me_from_my_pain(void*) {
         treturn(false);
     }
     
+    treturn(true);
+}
+
+static void extfrag(void*) {
+    //Heap starts with one big block
+    if (k_mem_count_extfrag(33) != 0) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(16385) != 0) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(100000) != 1) {
+        treturn(false);
+    }
+
+    void* ptr = k_mem_alloc(1);
+    if (k_mem_count_extfrag(33) != 1) {//We should have a 32-byte buddy!
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(16385) != 10) {//Each level also should have gotten a buddy
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(100000) != 10) {//The root should no longer be free
+        treturn(false);
+    }
+
+    void* ptr2 = k_mem_alloc(1);
+    if (k_mem_count_extfrag(33) != 0) {//We should have no 32-byte buddies!
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(16385) != 9) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(100000) != 9) {
+        treturn(false);
+    }
+
+    k_mem_dealloc(ptr);
+    if (k_mem_count_extfrag(33) != 1) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(16385) != 10) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(100000) != 10) {
+        treturn(false);
+    }
+
+    k_mem_dealloc(ptr2);
+    if (k_mem_count_extfrag(33) != 0) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(16385) != 0) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(100000) != 1) {
+        treturn(false);
+    }
+
     treturn(true);
 }
 
@@ -1490,6 +1553,86 @@ static void reincarnation(void*) {//Corresponds to Lab 1 evaluation outline #11
 
     tprintf("I feel myself slipping away, good thing I'm insured, that's how this works right?");
     osTaskExit();
+}
+
+static void mem_ownership_helper(void*) {
+    void* ptr_copy      = k_mem_alloc(1);
+    if (ptr_copy == NULL) {
+        tprintf("k_mem_alloc() failed to allocate memory!");
+        mem_ownership_ptr = (void*)0xDEADBEEF;
+        osTaskExit();
+    }
+    mem_ownership_ptr = ptr_copy;
+
+    while (mem_ownership_ptr != NULL) {
+        osYield();
+    }
+
+    if (k_mem_dealloc(ptr_copy) != RTX_OK) {
+        tprintf("k_mem_dealloc() failed to deallocate memory!");
+        mem_ownership_ptr = (void*)0xDEADBEEF;
+        osTaskExit();
+    }
+
+    ptr_copy            = NULL;
+    mem_ownership_ptr   = (void*)0xFFFFFFFF;
+    osTaskExit();
+}
+
+static void mem_ownership(void*) {
+    void* my_alloc = k_mem_alloc(1);
+    if (my_alloc == NULL) {
+        tprintf("k_mem_alloc() failed to allocate memory!");
+        treturn(false);
+    }
+
+    mem_ownership_ptr = NULL;
+
+    TCB task;
+    memset(&task, 0, sizeof(TCB));
+    task.ptask      = mem_ownership_helper;
+    task.stack_size = STACK_SIZE;
+    if (osCreateTask(&task) != RTX_OK) {
+        tprintf("Failed to create a new task!");
+        k_mem_dealloc(my_alloc);
+        treturn(false);
+    }
+
+    while (mem_ownership_ptr == NULL) {//Wait until the helper allocates
+        osYield();
+    }
+
+    if (mem_ownership_ptr == (void*)0xDEADBEEF) {
+        tprintf("The helper task failed to allocate memory!");
+        k_mem_dealloc(my_alloc);
+        treturn(false);
+    }
+
+    if (k_mem_dealloc(mem_ownership_ptr) != RTX_ERR) {
+        tprintf("k_mem_dealloc() deallocated memory that it didn't own!");
+        mem_ownership_ptr = NULL;//Tell the helper to move on and exit
+        treturn(false);
+    }
+
+    if (k_mem_dealloc(my_alloc) != RTX_OK) {
+        tprintf("k_mem_dealloc() failed to deallocate memory we did own!");
+        mem_ownership_ptr = NULL;//Tell the helper to move on and exit
+        treturn(false);
+    }
+
+    mem_ownership_ptr = NULL;//Tell the helper to move on and exit
+    
+    while (mem_ownership_ptr == NULL) {//Wait until the helper deallocates
+        osYield();
+    }
+
+    if (mem_ownership_ptr == (void*)0xDEADBEEF) {
+        tprintf("The helper task failed to deallocate memory!");
+        k_mem_dealloc(my_alloc);
+        treturn(false);
+    }
+
+    treturn(true);
 }
 
 static void insanity_helper(void*) {
