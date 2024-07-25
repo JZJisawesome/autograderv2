@@ -1,6 +1,6 @@
 /**
  * @file    main.c
- * @brief   Autograder for ECE 350
+ * @brief   Autograder for ECE 350 (LAB 1 AND LAB 2 ONLY)
  * 
  * @copyright Copyright (C) 2024 John Jekel and contributors
  * See the LICENSE file at the root of the project for licensing info.
@@ -228,6 +228,7 @@ int main(void) {
 
     //Logo!
     printf("%s", LOGO);//Corresponds to Lab 1 evaluation outline #0
+    rprintf("DUE TO FUNDAMENTAL INCOMPATIBLITIES PLEASE USE `main3.c` TO TEST YOUR CODE FOR LAB 3!");
     wprintf("Testing for Lab \x1b[96m%d\r\n", LAB_NUMBER);
     wprintf("Note that a base level of functionality is required in order to run the autograder");
     wprintf("to completion without crashing. Even if you can't get that far right away,");
@@ -739,6 +740,8 @@ static void mandelbrot_forever(void) {//Can't return due to the FP issue, we don
         printf("\r\n");
         cimag += imag_step;
     }
+
+    rprintf("DUE TO FUNDAMENTAL INCOMPATIBLITIES PLEASE USE `main3.c` TO TEST YOUR CODE FOR LAB 3!");
 
     while (true);
 }

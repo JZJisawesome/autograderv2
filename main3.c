@@ -1,6 +1,6 @@
 /**
- * @file    main.c
- * @brief   Autograder for ECE 350
+ * @file    main3.c
+ * @brief   Autograder for ECE 350 (Lab 3 Version)
  * 
  * @copyright Copyright (C) 2024 John Jekel and contributors
  * See the LICENSE file at the root of the project for licensing info.
@@ -32,36 +32,31 @@
  * Constants/Defines
  * --------------------------------------------------------------------------------------------- */
 
-//Change this to the lab you want to test for
-//#define LAB_NUMBER 1
-#define LAB_NUMBER 2
-//#define LAB_NUMBER 3
-
 #define NUM_TEST_FUNCTIONS 20
 
 //X macros are magical! :)
 //Order: function name, stack size, minimum lab number required, description string, author string
 #define TEST_FUNCTIONS \
-    X(sanity,                       STACK_SIZE, 1,  "Basic sanity test",                                            "JZJ") \
-    X(eternalprintf,                STACK_SIZE, 1,  "Group 13's first testcase. No idea why that's the name...",    "JZJ") \
-    X(lab2sanity,                   STACK_SIZE, 2,  "Allocates and deallocates some memory!",                       "JZJ") \
-    X(free_me_from_my_pain,         STACK_SIZE, 2,  "Attempts to free you from existence with DEADLY pointers!",    "JZJ") \
-    X(extfrag,                      STACK_SIZE, 2,  "Tests k_mem_count_extfrag()",                                  "JZJ") \
-    X(reject_bad_tcbs,              STACK_SIZE, 1,  "You shouldn't create tasks from bad TCBs, it's not healthy!",  "JZJ") \
-    X(stack_reuse,                  STACK_SIZE, 1,  "Basic stack reuse test",                                       "JZJ") \
-    X(square_batman,                STACK_SIZE, 1,  "Round robin test",                                             "JZJ") \
-    X(test4ispain,                  STACK_SIZE, 1,  "WHYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY :(",                    "JZJ") \
-    X(odds_are_stacked_against_you, STACK_SIZE, 1,  "Stack integrity test across osYield()",                        "JZJ") \
-    X(i_prefer_latches,             STACK_SIZE, 1,  "Register integrity test across osYield()",                     "JZJ") \
-    X(tid_limits,                   STACK_SIZE, 1,  "Maximum number of TIDs test",                                  "JZJ") \
-    X(tid_uniqueness,               STACK_SIZE, 1,  "Ensure the same TID isn't used for two tasks",                 "JZJ") \
-    X(reincarnation,                STACK_SIZE, 1,  "A task whose last act is to recreate itself",                  "JZJ") \
-    X(mem_ownership,                STACK_SIZE, 2,  "Ensures you can't free memory you don't own",                  "JZJ") \
-    X(insanity,                     0x400,      1,  "This is a tough one, but you can do it!",                      "JZJ") \
-    X(insanity2,                    0x400,      2,  "Your heap will weep!",                                         "JZJ") \
-    X(kachow,                       0x400,      2,  "Gotta go fast! Wait no that's a different franchise.",         "JZJ") \
-    X(greedy,                       STACK_SIZE, 1,  "Stack exaustion test. This test should come near last.",       "JZJ") \
-    X(big_alloc,                    0x800,      2,  "Allocate and deallocate almost 32KiB of memory a few ways!",   "JZJ")
+    X(sanity,                       STACK_SIZE, "Basic sanity test",                                            "JZJ") \
+    X(eternalprintf,                STACK_SIZE, "Group 13's first testcase. No idea why that's the name...",    "JZJ") \
+    X(lab2sanity,                   STACK_SIZE, "Allocates and deallocates some memory!",                       "JZJ") \
+    X(free_me_from_my_pain,         STACK_SIZE, "Attempts to free you from existence with DEADLY pointers!",    "JZJ") \
+    X(extfrag,                      STACK_SIZE, "Tests k_mem_count_extfrag()",                                  "JZJ") \
+    X(reject_bad_tcbs,              STACK_SIZE, "You shouldn't create tasks from bad TCBs, it's not healthy!",  "JZJ") \
+    X(stack_reuse,                  STACK_SIZE, "Basic stack reuse test",                                       "JZJ") \
+    X(square_batman,                STACK_SIZE, "Round robin test",                                             "JZJ") \
+    X(test4ispain,                  STACK_SIZE, "WHYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY :(",                    "JZJ") \
+    X(odds_are_stacked_against_you, STACK_SIZE, "Stack integrity test across osYield()",                        "JZJ") \
+    X(i_prefer_latches,             STACK_SIZE, "Register integrity test across osYield()",                     "JZJ") \
+    X(tid_limits,                   STACK_SIZE, "Maximum number of TIDs test",                                  "JZJ") \
+    X(tid_uniqueness,               STACK_SIZE, "Ensure the same TID isn't used for two tasks",                 "JZJ") \
+    X(reincarnation,                STACK_SIZE, "A task whose last act is to recreate itself",                  "JZJ") \
+    X(mem_ownership,                STACK_SIZE, "Ensures you can't free memory you don't own",                  "JZJ") \
+    X(insanity,                     0x400,      "This is a tough one, but you can do it!",                      "JZJ") \
+    X(insanity2,                    0x400,      "Your heap will weep!",                                         "JZJ") \
+    X(kachow,                       0x400,      "Gotta go fast! Wait no that's a different franchise.",         "JZJ") \
+    X(greedy,                       STACK_SIZE, "Stack exaustion test. This test should come near last.",       "JZJ") \
+    X(big_alloc,                    0x800,      "Allocate and deallocate almost 32KiB of memory a few ways!",   "JZJ")
 //TODO comprehensive extfrag test
 //TODO stress test for alloc and dealloc
 //TODO We can always use more testcases!
@@ -137,7 +132,6 @@ typedef struct {
     void              (*ptr)(void* args);
     const char* const   name;
     uint16_t            stack_size;
-    uint8_t             min_labn;
     const char* const   description;
     const char* const   author;
 } test_function_info_s;
@@ -165,7 +159,7 @@ static uint32_t mandelbrot_iterations(float creal, float cimag);
 static void     mandelbrot_forever(void);
 
 //Test function definitions
-#define X(name, stack_size, min_labn, desc, author) static void name(void*);
+#define X(name, stack_size, desc, author) static void name(void*);
 TEST_FUNCTIONS
 #undef X
 
@@ -182,7 +176,7 @@ static const char* const LOGO = "\r\n\r\n\x1b[95m"
 "| (_| | |_| | || (_) | (_| | | | (_| | (_| |  __/ |   \\ V / / __/\r\n"
 " \\__,_|\\__,_|\\__\\___/ \\__, |_|  \\__,_|\\__,_|\\___|_|    \\_/ |_____|\r\n"
 "                      |___/\x1b[0m\r\n"
-"\x1b[1m\"We're doing a sequel!\"\x1b[0m\r\n"
+"\x1b[1m\"Lab 3 edition!\"\x1b[0m\r\n"
 "\x1b[1mCopyright (C) 2024 \x1b[95mJohn Jekel\x1b[0m\x1b[1m and contributors\x1b[0m\r\n"
 "\x1b[1mRepo: \x1b[96mhttps://github.com/JZJisawesome/autograderv2\x1b[0m\r\n\r\n";
 
@@ -190,7 +184,7 @@ static const test_function_info_s test_functions[NUM_TEST_FUNCTIONS] = {
     //These should set function_complete to true when they finish so we can move onto the next one
     //This synchronization mechanism works only if there's one test function running at once and
     //they only write true (while the test_function_manager reads it/writes false)
-#define X(name, stack_size, min_labn, desc, author) {name, #name, stack_size, min_labn, desc, author},
+#define X(name, stack_size, desc, author) {name, #name, stack_size, desc, author},
     TEST_FUNCTIONS
 #undef X
 };
@@ -228,7 +222,7 @@ int main(void) {
 
     //Logo!
     printf("%s", LOGO);//Corresponds to Lab 1 evaluation outline #0
-    wprintf("Testing for Lab \x1b[96m%d\r\n", LAB_NUMBER);
+    wprintf("Testing for Lab \x1b[96m%d\r\n", 3);
     wprintf("Note that a base level of functionality is required in order to run the autograder");
     wprintf("to completion without crashing. Even if you can't get that far right away,");
     wprintf("as you make progress you'll get further and further through the autograder");
@@ -300,69 +294,44 @@ int main(void) {
     }
 
     //Privileged test #7
-#if LAB_NUMBER >= 2
     if (k_mem_alloc(1) != NULL) {
         rprintf("    k_mem_alloc() should fail before k_mem_init()!");
     } else {
         gprintf("    k_mem_alloc() is behaving as expected before k_mem_init()!");
         ++num_passed;
     }
-#else
-    bprintf("    Skipping k_mem_alloc() test since it's not required for Lab 1...");
-    ++num_skipped;
-#endif
 
     //Privileged test #8
-#if LAB_NUMBER >= 2
     if (k_mem_init() == RTX_OK) {
         rprintf("    k_mem_init() should fail before kernel init!");
     } else {
         gprintf("    k_mem_init() is behaving as expected before the kernel starts!");
         ++num_passed;
     }
-#else
-    bprintf("    Skipping k_mem_init() test since it's not required for Lab 1...");
-    ++num_skipped;
-#endif
 
     //Privileged test #9
-#if LAB_NUMBER >= 2
     if (k_mem_alloc(1) != NULL) {
         rprintf("    k_mem_alloc() should fail before (a successful) k_mem_init()!");
     } else {
         gprintf("    k_mem_alloc() is behaving as expected before k_mem_init()!");
         ++num_passed;
     }
-#else
-    bprintf("    Skipping another k_mem_alloc() test since it's not required for Lab 1...");
-    ++num_skipped;
-#endif
 
     //Privileged test #10
-#if LAB_NUMBER >= 2
     if (k_mem_dealloc(NULL) != RTX_ERR) {
         rprintf("    k_mem_dealloc() should fail before (a successful) k_mem_init()!");
     } else {
         gprintf("    k_mem_dealloc() is behaving as expected before k_mem_init()!");
         ++num_passed;
     }
-#else
-    bprintf("    Skipping a k_mem_dealloc() test since it's not required for Lab 1...");
-    ++num_skipped;
-#endif
 
     //Privileged test #11
-#if LAB_NUMBER >= 2
     if (k_mem_count_extfrag(100000) != 0) {
         rprintf("    k_mem_count_extfrag() should fail before (a successful) k_mem_init()!");
     } else {
         gprintf("    k_mem_count_extfrag() is behaving as expected before k_mem_init()!");
         ++num_passed;
     }
-#else
-    bprintf("    Skipping a k_mem_count_extfrag() test since it's not required for Lab 1...");
-    ++num_skipped;
-#endif
     
     //TODO more tests pre-init
 
@@ -431,43 +400,28 @@ int main(void) {
     }
 
     //Privileged test #17
-#if LAB_NUMBER >= 2
     if (k_mem_init() != RTX_OK) {//FIXME what about testing if k_mem_init() works if called from a user task?
         rprintf("    k_mem_init() failed!");
     } else {
         gprintf("    k_mem_init() was successful!");
         ++num_passed;
     }
-#else
-    bprintf("    Skipping k_mem_init() test since it's not required for Lab 1...");
-    ++num_skipped;
-#endif
 
     //Privileged test #18
-#if LAB_NUMBER >= 2
     if (k_mem_init() == RTX_OK) {
         rprintf("    k_mem_init() should fail if called twice!");
     } else {
         gprintf("    k_mem_init() refused to be called twice as expected!");
         ++num_passed;
     }
-#else
-    bprintf("    Skipping another k_mem_init() test since it's not required for Lab 1...");
-    ++num_skipped;
-#endif
 
     //Privileged test #19
-#if LAB_NUMBER >= 2
     if (k_mem_count_extfrag(100000) != 1) {
         rprintf("    k_mem_count_extfrag() should be 1 right after k_mem_init()!");
     } else {
         gprintf("    k_mem_count_extfrag() is behaving as expected after k_mem_init()!");
         ++num_passed;
     }
-#else
-    bprintf("    Skipping a k_mem_count_extfrag() test since it's not required for Lab 1...");
-    ++num_skipped;
-#endif
 
     //Privileged test #20
     TCB test_function_manager_task;
@@ -590,19 +544,6 @@ static void test_function_manager(void*) {
         memset(&task, 0, sizeof(TCB));
         task.ptask      = test_functions[ii].ptr;
         task.stack_size = test_functions[ii].stack_size;
-
-        if (LAB_NUMBER < test_functions[ii].min_labn) {
-            bprintf(
-                "\r\nSkipping test function \x1b[96m#%u\x1b[91m, \x1b[96m%s()\x1b[91m,"
-                 " since it's a Lab %u test but we're in Lab %u testing mode!",
-                ii + 1,
-                test_functions[ii].name,
-                test_functions[ii].min_labn,
-                LAB_NUMBER
-            );
-            ++num_skipped;
-            continue;
-        }
         
         wprintf(
             "\r\nRunning test function \x1b[96m#%u\x1b[0m\x1b[1m, \x1b[96m%s()\x1b[0m\x1b[1m, "
