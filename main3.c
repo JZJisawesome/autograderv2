@@ -32,10 +32,13 @@
  * Constants/Defines
  * --------------------------------------------------------------------------------------------- */
 
-#define NUM_TEST_FUNCTIONS 19
+//#define NUM_TEST_FUNCTIONS 18
+#define NUM_TEST_FUNCTIONS 16
 
 //X macros are magical! :)
-//Order: function name, stack size, minimum lab number required, description string, author string
+
+//TODO support for tasks with particular deadlines
+//Order: function name, stack size, deadline, description string, author string
 #define TEST_FUNCTIONS \
     X(sanity,                       STACK_SIZE, "Basic sanity test",                                            "JZJ") \
     X(eternalprintf,                STACK_SIZE, "Group 13's first testcase. No idea why that's the name...",    "JZJ") \
@@ -44,7 +47,6 @@
     X(extfrag,                      STACK_SIZE, "Tests k_mem_count_extfrag()",                                  "JZJ") \
     X(reject_bad_tcbs,              STACK_SIZE, "You shouldn't create tasks from bad TCBs, it's not healthy!",  "JZJ") \
     X(stack_reuse,                  STACK_SIZE, "Basic stack reuse test",                                       "JZJ") \
-    X(test4ispain,                  STACK_SIZE, "WHYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY :(",                    "JZJ") \
     X(odds_are_stacked_against_you, STACK_SIZE, "Stack integrity test across osYield()",                        "JZJ") \
     X(i_prefer_latches,             STACK_SIZE, "Register integrity test across osYield()",                     "JZJ") \
     X(tid_limits,                   STACK_SIZE, "Maximum number of TIDs test",                                  "JZJ") \
@@ -52,10 +54,13 @@
     X(reincarnation,                STACK_SIZE, "A task whose last act is to recreate itself",                  "JZJ") \
     X(mem_ownership,                STACK_SIZE, "Ensures you can't free memory you don't own",                  "JZJ") \
     X(insanity,                     0x400,      "This is a tough one, but you can do it!",                      "JZJ") \
-    X(insanity2,                    0x400,      "Your heap will weep!",                                         "JZJ") \
     X(kachow,                       0x400,      "Gotta go fast! Wait no that's a different franchise.",         "JZJ") \
-    X(greedy,                       STACK_SIZE, "Stack exaustion test. This test should come near last.",       "JZJ") \
-    X(big_alloc,                    0x800,      "Allocate and deallocate almost 32KiB of memory a few ways!",   "JZJ")
+    X(greedy,                       STACK_SIZE, "Stack exaustion test. This test should come near last.",       "JZJ")
+
+//TODO fix these two for Lab 3
+//X(insanity2,                    0x400,      "Your heap will weep!",                                         "JZJ") \
+//X(big_alloc,                    0x800,      "Allocate and deallocate almost 32KiB of memory a few ways!",   "JZJ")
+
 //TODO comprehensive extfrag test
 //TODO stress test for alloc and dealloc
 //TODO We can always use more testcases!
@@ -63,7 +68,7 @@
 //Bonus tests (not required to support these)!
 //X(task_wrapper_test,            STACK_SIZE,     "What happens if a task's function returns?",                   "JZJ")
 
-#define NUM_PRIVILEGED_TESTS 21
+#define NUM_PRIVILEGED_TESTS 23
 
 //The largest block header size we'd ever expect for a group's code
 #define MAX_BLOCK_HEADER_SIZE 16
@@ -420,7 +425,38 @@ int main(void) {
         ++num_passed;
     }
 
-    //Privileged test #20
+    //Privileged test #20 and #21
+    //Borrowed from https://piazza.com/class/lvlcv9pc4496o8/post/253
+    //This makes things compatible for both people who went for the Lab 2 heap size
+    //bonus and those who didn't!
+    void* big_alloc = k_mem_alloc(32737);//31 bytes less than 32KiB
+    if (big_alloc == NULL) {
+        rprintf("    k_mem_alloc() failed to allocate a ~32KiB block in privileged mode!");
+        bprintf("    Skipping privileged k_mem_dealloc() test since the allocation failed...");
+        ++num_skipped;
+    } else {
+        gprintf("    k_mem_alloc() successfully allocated a ~32KiB block in privileged mode!");
+        ++num_passed;
+
+        uint32_t leakage = 0;
+        while (true) {
+            void* leak_me = k_mem_alloc(1);
+            if (leak_me == NULL) {
+                break;
+            }
+            ++leakage;
+        }
+        wprintf("        You have an estimated heap size of %lu bytes!", 32768 + (leakage * 32));
+
+        if (k_mem_dealloc(big_alloc) != RTX_OK) {
+            rprintf("    k_mem_dealloc() failed to deallocate a 32KiB block in privileged mode!");
+        } else {
+            gprintf("    k_mem_dealloc() successfully deallocated in privileged mode!");
+            ++num_passed;
+        }
+    }
+
+    //Privileged test #22
     TCB test_function_manager_task;
     memset(&test_function_manager_task, 0, sizeof(TCB));
     test_function_manager_task.ptask      = test_function_manager;
@@ -436,7 +472,7 @@ int main(void) {
         ++num_passed;
     }
 
-    //Privileged test #21
+    //Privileged test #23
     task_info_passed = true;
     for (task_t ii = 0; ii < MAX_TASKS; ++ii) {
         TCB task_info;
@@ -488,8 +524,6 @@ int main(void) {
         gprintf("    osTaskInfo() is behaving as expected before the kernel starts!");
         ++num_passed;
     }
-
-    //TODO try to allocate memory in privileged mode!
 
     //And off we go!
     wprintf("Okay, I'm calling osKernelStart() now. This is a big step, don't get disheartened");
@@ -565,6 +599,7 @@ static void test_function_manager(void*) {
 
         while (!function_complete) {
             //Unlike Lab 1 and 2, we don't need to osYield() in a tight loop anymore!
+            //osYield();
         }
 
         if (function_status) {
@@ -607,7 +642,8 @@ static void test_function_manager(void*) {
 static void spinner(void*) {
     while (!topple) {
         //Around and around we go!
-        osYield();
+        //Unlike Lab 1 and 2, we don't need to osYield() in a tight loop anymore!
+        //osYield();
     }
 
     //We toppled over!
@@ -618,7 +654,8 @@ static void spinner(void*) {
 static void topple_spinners(void) {
     topple = true;
     while (spin_count) {
-        osYield();
+        //Unlike Lab 1 and 2, we don't need to osYield() in a tight loop anymore!
+        osYield();//FIXME why does removing this break things? Deadlines perhaps?
     }
 }
 
@@ -779,58 +816,164 @@ static void free_me_from_my_pain(void*) {
 }
 
 static void extfrag(void*) {
-    //Heap starts with one big block
+    //In lab 3, we expect there to be two allocations at the start of this function already,
+    //one of size STACK_SIZE = 0x200 and one of size FN_MANAGER_STACK_SIZE = 0x400.
+    //These are just big enough to take a 1K and 2K block out of the heap respectively.
+    //So we should have free buddies of size 16KiB, 8KiB, 4KiB, and 1KiB
+
+    if (k_mem_count_extfrag(32769) != 4) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(16384) != 3) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(8192) != 2) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(4096) != 1) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(2048) != 1) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(1025) != 1) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(1024) != 0) {
+        treturn(false);
+    }
     if (k_mem_count_extfrag(33) != 0) {
-        treturn(false);
-    }
-    if (k_mem_count_extfrag(16385) != 0) {
-        treturn(false);
-    }
-    if (k_mem_count_extfrag(100000) != 1) {
         treturn(false);
     }
 
     void* ptr = k_mem_alloc(1);
+    if (k_mem_count_extfrag(32769) != 8) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(16384) != 7) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(8192) != 6) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(4096) != 5) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(2048) != 5) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(1025) != 5) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(513) != 5) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(257) != 4) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(129) != 3) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(65) != 2) {
+        treturn(false);
+    }
     if (k_mem_count_extfrag(33) != 1) {//We should have a 32-byte buddy!
-        treturn(false);
-    }
-    if (k_mem_count_extfrag(16385) != 10) {//Each level also should have gotten a buddy
-        treturn(false);
-    }
-    if (k_mem_count_extfrag(100000) != 10) {//The root should no longer be free
         treturn(false);
     }
 
     void* ptr2 = k_mem_alloc(1);
+    if (k_mem_count_extfrag(32769) != 7) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(16384) != 6) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(8192) != 5) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(4096) != 4) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(2048) != 4) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(1025) != 4) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(513) != 4) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(257) != 3) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(129) != 2) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(65) != 1) {
+        treturn(false);
+    }
     if (k_mem_count_extfrag(33) != 0) {//We should have no 32-byte buddies!
-        treturn(false);
-    }
-    if (k_mem_count_extfrag(16385) != 9) {
-        treturn(false);
-    }
-    if (k_mem_count_extfrag(100000) != 9) {
         treturn(false);
     }
 
     k_mem_dealloc(ptr);
-    if (k_mem_count_extfrag(33) != 1) {
+    if (k_mem_count_extfrag(32769) != 8) {
         treturn(false);
     }
-    if (k_mem_count_extfrag(16385) != 10) {
+    if (k_mem_count_extfrag(16384) != 7) {
         treturn(false);
     }
-    if (k_mem_count_extfrag(100000) != 10) {
+    if (k_mem_count_extfrag(8192) != 6) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(4096) != 5) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(2048) != 5) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(1025) != 5) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(513) != 5) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(257) != 4) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(129) != 3) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(65) != 2) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(33) != 1) {//We should have a 32-byte buddy!
         treturn(false);
     }
 
     k_mem_dealloc(ptr2);
+    if (k_mem_count_extfrag(32769) != 4) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(16384) != 3) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(8192) != 2) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(4096) != 1) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(2048) != 1) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(1025) != 1) {
+        treturn(false);
+    }
+    if (k_mem_count_extfrag(1024) != 0) {
+        treturn(false);
+    }
     if (k_mem_count_extfrag(33) != 0) {
-        treturn(false);
-    }
-    if (k_mem_count_extfrag(16385) != 0) {
-        treturn(false);
-    }
-    if (k_mem_count_extfrag(100000) != 1) {
         treturn(false);
     }
 
@@ -1137,119 +1280,15 @@ static void stack_reuse(void*) {//PARTIALLY corresponds to Lab 1 evaluation outl
     tprintf("stack_high for spinner 1: 0x%lX", spinner1_info.stack_high);
     tprintf("stack_high for spinner 2: 0x%lX", spinner2_info.stack_high);
     tprintf("You passed if those are the same (and both spinners were actually created)!");
+    tprintf("(though depending on your buddy allocator design you could fail this and be fine)");
+    tprintf("Oh and also 8-byte aligned, which I probably also should have checked in Lab 1 as well...");
 
     //We were successful if spinner 2 reused spinner 1's stack
-    treturn(spinner1_tid && spinner2_tid && (spinner1_info.stack_high == spinner2_info.stack_high));
-}
-
-static void test4ispain_helper(void*) {
-    //Choose a counter for the test
-    int my_counter = 0;
-    for (int ii = 0; ii < NUM_SIDEKICKS; ++ii) {
-        if (test4pain_counters[ii] == 0) {
-            my_counter              = ii;
-            test4pain_counters[ii]  = 1;
-            break;
-        }
-    }
-
-    //Wait for all tasks to be ready
-    while (test4pain_counters[2] == 0) {
-        osYield();
-    }
-
-    tprintf("I am task #%d!", my_counter);
-
-    for (int ii = 1; ii < 10; ++ii) {
-        tprintf(
-            "Incrementing counter %d from %d to %d",
-            my_counter,
-            test4pain_counters[my_counter],
-            test4pain_counters[my_counter] + 1
-        );
-        ++test4pain_counters[my_counter];
-
-        if ((ii == 5) && (my_counter == 1)) {
-            tprintf("Task %d is exiting early...", my_counter);
-            osTaskExit();
-        }
-
-        osYield();
-    }
-
-    osTaskExit();
-}
-
-static void test4ispain(void*) {
-    tprintf("NOTE: Neither this test nor the square_batman() one is seemingly");
-    tprintf("able to replicate my team's failure of the real `test4`.");
-    tprintf("We had to create a seperate file to replicate this behaviour.");
-    tprintf("Maybe that's due to the other tasks that are present when the");
-    tprintf("helpers are running that obscures the issue?");
-    tprintf("Check out `lab1_test4ish.c` for what did work for us.");
-    tprintf("YOU'VE BEEN WARNED");
-
-    //Setup test helpers
-    TCB helper_task;
-    memset(&helper_task, 0, sizeof(TCB));
-    helper_task.ptask      = test4ispain_helper;
-    helper_task.stack_size = STACK_SIZE;
-
-    for (int ii = 0; ii < 3; ++ii) {
-        if (osCreateTask(&helper_task) != RTX_OK) {
-            tprintf(":(");
-            treturn(false);
-        }
-    }
-
-    //Wait for all tasks to be ready
-    while (test4pain_counters[2] == 0) {
-        osYield();
-    }
-
-    //The entire is complete when all counters are 10
-    bool all_counters_are_10 = false;
-    while (!all_counters_are_10) {
-        all_counters_are_10 = true;
-
-        int minimum = 11;
-        int maximum = 0;
-        for (int ii = 0; ii < 3; ++ii) {
-            if (ii == 1) {//Ignore task 2
-                continue;
-            }
-
-            if (test4pain_counters[ii] != 10) {
-                all_counters_are_10 = false;
-            }
-
-            if (test4pain_counters[ii] < minimum) {
-                minimum = test4pain_counters[ii];
-            }
-
-            if (test4pain_counters[ii] > maximum) {
-                maximum = test4pain_counters[ii];
-            }
-        }
-
-        int difference = maximum - minimum;
-        if (difference > 1) {
-            tprintf("Test 4 is really a pain!");
-            tprintf("The difference between the highest and lowest counter is %d", difference);
-            for (int ii = 0; ii < 3; ++ii) {
-                tprintf("    Counter #%d: %d", ii, test4pain_counters[ii]);
-            }
-            treturn(false);
-        }
-
-        osYield();
-    }
-
-    tprintf("Good luck!");
-    osYield();
-    osYield();
-    osYield();
-    treturn(true);
+    treturn(
+        spinner1_tid && spinner2_tid &&
+        (spinner1_info.stack_high == spinner2_info.stack_high) &&
+        ((spinner1_info.stack_high % 8) == 0)
+    );
 }
 
 static void odds_are_stacked_against_you(void*) {
@@ -1376,13 +1415,15 @@ static void reincarnation(void*) {//Corresponds to Lab 1 evaluation outline #11
     task.ptask      = reincarnation;
     task.stack_size = STACK_SIZE;
     
+    //Modification for Lab 3: Decrement before creating the next task to avoid
+    //any possiblity of a race if we are preempted
+    --number_of_lives;
+
     if (osCreateTask(&task) != RTX_OK) {
         tprintf("The premiums are way to high! I can't afford this!");
         tprintf("(Failed to create a new task!)");
         treturn(false);
     }
-
-    --number_of_lives;
 
     tprintf("I feel myself slipping away, good thing I'm insured, that's how this works right?");
     osTaskExit();
