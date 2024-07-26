@@ -32,7 +32,7 @@
  * Constants/Defines
  * --------------------------------------------------------------------------------------------- */
 
-#define NUM_TEST_FUNCTIONS 20
+#define NUM_TEST_FUNCTIONS 19
 
 //X macros are magical! :)
 //Order: function name, stack size, minimum lab number required, description string, author string
@@ -44,7 +44,6 @@
     X(extfrag,                      STACK_SIZE, "Tests k_mem_count_extfrag()",                                  "JZJ") \
     X(reject_bad_tcbs,              STACK_SIZE, "You shouldn't create tasks from bad TCBs, it's not healthy!",  "JZJ") \
     X(stack_reuse,                  STACK_SIZE, "Basic stack reuse test",                                       "JZJ") \
-    X(square_batman,                STACK_SIZE, "Round robin test",                                             "JZJ") \
     X(test4ispain,                  STACK_SIZE, "WHYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY :(",                    "JZJ") \
     X(odds_are_stacked_against_you, STACK_SIZE, "Stack integrity test across osYield()",                        "JZJ") \
     X(i_prefer_latches,             STACK_SIZE, "Register integrity test across osYield()",                     "JZJ") \
@@ -149,7 +148,6 @@ static void     spinner(void*);//Spins while osYield()ing until it "topples". Us
 static void     topple_spinners(void);//Waits for spinners to exit
 static task_t   beyblade_let_it_rip(void);//Does anyone remember this show? Kinda just a marketing stunt to sell spinning tops...
 
-static void square_batman_helper(void*);
 static void test4ispain_helper(void*);
 static void mem_ownership_helper(void*);
 static void insanity_helper(void*);
@@ -176,7 +174,7 @@ static const char* const LOGO = "\r\n\r\n\x1b[95m"
 "| (_| | |_| | || (_) | (_| | | | (_| | (_| |  __/ |   \\ V / / __/\r\n"
 " \\__,_|\\__,_|\\__\\___/ \\__, |_|  \\__,_|\\__,_|\\___|_|    \\_/ |_____|\r\n"
 "                      |___/\x1b[0m\r\n"
-"\x1b[1m\"Lab 3 edition!\"\x1b[0m\r\n"
+"\x1b[1mLab 3 edition!\x1b[0m\r\n"
 "\x1b[1mCopyright (C) 2024 \x1b[95mJohn Jekel\x1b[0m\x1b[1m and contributors\x1b[0m\r\n"
 "\x1b[1mRepo: \x1b[96mhttps://github.com/JZJisawesome/autograderv2\x1b[0m\r\n\r\n";
 
@@ -202,7 +200,6 @@ static volatile size_t  spin_count = 0;
 static volatile bool    topple     = false;
 
 //Testcase-specific statics
-static volatile int         square_batman_counters[NUM_SIDEKICKS] = {0, 0, 0, 0, 0};
 static volatile int         test4pain_counters[NUM_SIDEKICKS] = {0, 0, 0};
 static volatile size_t      insanity_counter = 0;
 static volatile void*       mem_ownership_ptr = NULL;
@@ -428,7 +425,7 @@ int main(void) {
     memset(&test_function_manager_task, 0, sizeof(TCB));
     test_function_manager_task.ptask      = test_function_manager;
     test_function_manager_task.stack_size = FN_MANAGER_STACK_SIZE;
-    if (osCreateTask(&test_function_manager_task) == RTX_ERR) {//Corresponds to Lab 1 evaluation outline #1
+    if (osCreateDeadlineTask(0x7FFFFFFF, &test_function_manager_task) == RTX_ERR) {//The test function manager has the farthest deadline
         rprintf("    osCreateTask() failed to create the test function manager task!");
         rprintf("    Sadly this means we can't really continue, but don't give up! :)");
         while(true);
@@ -567,7 +564,7 @@ static void test_function_manager(void*) {
         }
 
         while (!function_complete) {
-            osYield();
+            //Unlike Lab 1 and 2, we don't need to osYield() in a tight loop anymore!
         }
 
         if (function_status) {
@@ -1143,111 +1140,6 @@ static void stack_reuse(void*) {//PARTIALLY corresponds to Lab 1 evaluation outl
 
     //We were successful if spinner 2 reused spinner 1's stack
     treturn(spinner1_tid && spinner2_tid && (spinner1_info.stack_high == spinner2_info.stack_high));
-}
-
-static void square_batman_helper(void*) {
-    //Choose a counter for the test
-    int my_counter = 0;
-    for (int ii = 0; ii < NUM_SIDEKICKS; ++ii) {
-        if (square_batman_counters[ii] == 0) {
-            my_counter                  = ii;
-            square_batman_counters[ii]  = 1;
-            break;
-        }
-    }
-    tprintf("I am Robin #%d!", my_counter);
-
-    //Wait for all Robins to pick their counter
-    while (square_batman_counters[NUM_SIDEKICKS - 1] == 0) {
-        osYield();
-    }
-
-    //Let's see how round these Robins are!
-    for (int ii = 1; ii < 10; ++ii) {
-        tprintf(
-            "Incrementing counter %d from %d to %d",
-            my_counter,
-            square_batman_counters[my_counter],
-            square_batman_counters[my_counter] + 1
-        );
-        ++square_batman_counters[my_counter];
-
-        if ((ii == 5) && (my_counter == EVIL_ROBIN)) {
-            tprintf("I AM EVIL #%d! I'm going to exit early and throw the other Robins off!", my_counter);
-            osTaskExit();
-        }
-
-        osYield();
-    }
-
-    osTaskExit();
-}
-
-static void square_batman(void*) {//Corresponds to Lab 1 evaluation outline #3 and #4
-    //Setup robins
-    TCB helper_task;
-    memset(&helper_task, 0, sizeof(TCB));
-    helper_task.ptask      = square_batman_helper;
-    helper_task.stack_size = STACK_SIZE;
-
-    for (int ii = 0; ii < NUM_SIDEKICKS; ++ii) {
-        if (osCreateTask(&helper_task) != RTX_OK) {
-            tprintf("we live in a society...");
-            treturn(false);
-        }
-    }
-
-    //Wait for all Robins to pick their counter
-    while (square_batman_counters[NUM_SIDEKICKS - 1] == 0) {
-        osYield();
-    }
-
-    tprintf("I'M BATMAN!");
-
-    //The entire round robin test is complete when all counters are 10
-    bool all_counters_are_10 = false;
-    while (!all_counters_are_10) {
-        all_counters_are_10 = true;
-
-        int minimum = 11;
-        int maximum = 0;
-        for (int ii = 0; ii < NUM_SIDEKICKS; ++ii) {
-            if (ii == EVIL_ROBIN) {//Ignore the evil Robin
-                continue;
-            }
-
-            if (square_batman_counters[ii] != 10) {
-                all_counters_are_10 = false;
-            }
-            
-            if (square_batman_counters[ii] < minimum) {
-                minimum = square_batman_counters[ii];
-            }
-
-            if (square_batman_counters[ii] > maximum) {
-                maximum = square_batman_counters[ii];
-            }
-        }
-
-        int difference = maximum - minimum;
-        if (difference > 1) {
-            tprintf("Your Robins aren't round enough!");
-            tprintf("The difference between the highest and lowest Robin counter is %d", difference);
-            for (int ii = 0; ii < NUM_SIDEKICKS; ++ii) {
-                tprintf("    Robin #%d: %d", ii, square_batman_counters[ii]);
-            }
-            treturn(false);
-        }
-
-        osYield();
-    }
-
-    //Success! Yield a few times just to ensure the Robins exit
-    tprintf("Your Robins are perfectly round!");
-    osYield();
-    osYield();
-    osYield();
-    treturn(true);
 }
 
 static void test4ispain_helper(void*) {
