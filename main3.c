@@ -32,30 +32,31 @@
  * Constants/Defines
  * --------------------------------------------------------------------------------------------- */
 
-//#define NUM_TEST_FUNCTIONS 18
-#define NUM_TEST_FUNCTIONS 16
+#define NUM_TEST_FUNCTIONS 18
 
 //X macros are magical! :)
 
 //TODO support for tasks with particular deadlines
 //Order: function name, stack size, deadline, description string, author string
 #define TEST_FUNCTIONS \
-    X(sanity,                       STACK_SIZE, "Basic sanity test",                                            "JZJ") \
-    X(eternalprintf,                STACK_SIZE, "Group 13's first testcase. No idea why that's the name...",    "JZJ") \
-    X(lab2sanity,                   STACK_SIZE, "Allocates and deallocates some memory!",                       "JZJ") \
-    X(free_me_from_my_pain,         STACK_SIZE, "Attempts to free you from existence with DEADLY pointers!",    "JZJ") \
-    X(extfrag,                      STACK_SIZE, "Tests k_mem_count_extfrag()",                                  "JZJ") \
-    X(reject_bad_tcbs,              STACK_SIZE, "You shouldn't create tasks from bad TCBs, it's not healthy!",  "JZJ") \
-    X(stack_reuse,                  STACK_SIZE, "Basic stack reuse test",                                       "JZJ") \
-    X(odds_are_stacked_against_you, STACK_SIZE, "Stack integrity test across osYield()",                        "JZJ") \
-    X(i_prefer_latches,             STACK_SIZE, "Register integrity test across osYield()",                     "JZJ") \
-    X(tid_limits,                   STACK_SIZE, "Maximum number of TIDs test",                                  "JZJ") \
-    X(tid_uniqueness,               STACK_SIZE, "Ensure the same TID isn't used for two tasks",                 "JZJ") \
-    X(reincarnation,                STACK_SIZE, "A task whose last act is to recreate itself",                  "JZJ") \
-    X(mem_ownership,                STACK_SIZE, "Ensures you can't free memory you don't own",                  "JZJ") \
-    X(insanity,                     0x400,      "This is a tough one, but you can do it!",                      "JZJ") \
-    X(kachow,                       0x400,      "Gotta go fast! Wait no that's a different franchise.",         "JZJ") \
-    X(greedy,                       STACK_SIZE, "Stack exaustion test. This test should come near last.",       "JZJ")
+    X(prempt,                       STACK_SIZE, 5,      "Can you prempt tasks?",                                        "JZJ") \
+    X(sanity,                       STACK_SIZE, 5,      "Basic sanity test",                                            "JZJ") \
+    X(beeg_stack,                   16384 - 32, 5,      "Ensures you're using your heap allocator for task stacks",     "JZJ") \
+    X(eternalprintf,                STACK_SIZE, 5,      "Group 13's first testcase. No idea why that's the name...",    "JZJ") \
+    X(lab2sanity,                   STACK_SIZE, 5,      "Allocates and deallocates some memory!",                       "JZJ") \
+    X(free_me_from_my_pain,         STACK_SIZE, 5,      "Attempts to free you from existence with DEADLY pointers!",    "JZJ") \
+    X(extfrag,                      STACK_SIZE, 5,      "Tests k_mem_count_extfrag()",                                  "JZJ") \
+    X(reject_bad_tcbs,              STACK_SIZE, 5,      "You shouldn't create tasks from bad TCBs, it's not healthy!",  "JZJ") \
+    X(stack_reuse,                  STACK_SIZE, 5,      "Basic stack reuse test",                                       "JZJ") \
+    X(odds_are_stacked_against_you, STACK_SIZE, 5,      "Stack integrity test across osYield()",                        "JZJ") \
+    X(i_prefer_latches,             STACK_SIZE, 5,      "Register integrity test across osYield()",                     "JZJ") \
+    X(tid_limits,                   STACK_SIZE, 5,      "Maximum number of TIDs test",                                  "JZJ") \
+    X(tid_uniqueness,               STACK_SIZE, 5,      "Ensure the same TID isn't used for two tasks",                 "JZJ") \
+    X(reincarnation,                STACK_SIZE, 5,      "A task whose last act is to recreate itself",                  "JZJ") \
+    X(mem_ownership,                STACK_SIZE, 5,      "Ensures you can't free memory you don't own",                  "JZJ") \
+    X(insanity,                     0x400,      5,      "This is a tough one, but you can do it!",                      "JZJ") \
+    X(kachow,                       0x400,      5,      "Gotta go fast! Wait no that's a different franchise.",         "JZJ") \
+    X(greedy,                       STACK_SIZE, 5,      "Stack exaustion test. No longer needs to come last!",          "JZJ")
 
 //TODO fix these two for Lab 3
 //X(insanity2,                    0x400,      "Your heap will weep!",                                         "JZJ") \
@@ -136,6 +137,7 @@ typedef struct {
     void              (*ptr)(void* args);
     const char* const   name;
     uint16_t            stack_size;
+    int                 deadline;
     const char* const   description;
     const char* const   author;
 } test_function_info_s;
@@ -162,7 +164,7 @@ static uint32_t mandelbrot_iterations(float creal, float cimag);
 static void     mandelbrot_forever(void);
 
 //Test function definitions
-#define X(name, stack_size, desc, author) static void name(void*);
+#define X(name, stack_size, deadline, desc, author) static void name(void*);
 TEST_FUNCTIONS
 #undef X
 
@@ -187,7 +189,7 @@ static const test_function_info_s test_functions[NUM_TEST_FUNCTIONS] = {
     //These should set function_complete to true when they finish so we can move onto the next one
     //This synchronization mechanism works only if there's one test function running at once and
     //they only write true (while the test_function_manager reads it/writes false)
-#define X(name, stack_size, desc, author) {name, #name, stack_size, desc, author},
+#define X(name, stack_size, deadline, desc, author) {name, #name, stack_size, deadline, desc, author},
     TEST_FUNCTIONS
 #undef X
 };
@@ -205,9 +207,9 @@ static volatile size_t  spin_count = 0;
 static volatile bool    topple     = false;
 
 //Testcase-specific statics
-static volatile int         test4pain_counters[NUM_SIDEKICKS] = {0, 0, 0};
-static volatile size_t      insanity_counter = 0;
-static volatile void*       mem_ownership_ptr = NULL;
+static volatile bool    prempt_flag = false;
+static volatile size_t  insanity_counter = 0;
+static volatile void*   mem_ownership_ptr = NULL;
 
 /* ------------------------------------------------------------------------------------------------
  * Function Implementations
@@ -586,7 +588,13 @@ static void test_function_manager(void*) {
         );
         wprintf("Description: \x1b[96m%s", test_functions[ii].description);
 
-        int result = osCreateTask(&task);
+        int result;
+        if (test_functions[ii].deadline == 5) {
+            result = osCreateTask(&task);
+        } else {
+            result = osCreateDeadlineTask(test_functions[ii].deadline, &task);
+        }
+
         if (result != RTX_OK) {
             rprintf("Failed to create a task for the function! Moving on...");
             continue;
@@ -722,8 +730,42 @@ static void mandelbrot_forever(void) {//Can't return due to the FP issue, we don
  * Static Function Implementations (Test Functions)
  * --------------------------------------------------------------------------------------------- */
 
+static void prempt_helper(void*) {
+    //Helping!
+    prempt_flag = true;
+    osTaskExit();
+}
+
+static void prempt(void*) {
+    TCB helper_task;
+    memset(&helper_task, 0, sizeof(TCB));
+    helper_task.ptask      = prempt_helper;
+    helper_task.stack_size = STACK_SIZE;
+    int result = osCreateDeadlineTask(6, &helper_task);
+    if (result != RTX_OK) {
+        treturn(false);
+    }
+
+    //We're not calling osYield() here, but eventually the prempt_flag should be set!
+    while (!prempt_flag) {}
+
+    treturn(true);
+}
+
 static void sanity(void*) {
     //Do nothing!
+    treturn(true);
+}
+
+static void beeg_stack(void*) {
+    //This should fail with Lab 1/2 code since a 16384 bytes is the amount of TOTAL
+    //stack space. On the other hand, in Lab 3, this should totally be doable since, taking into
+    //account the stack used by the test manager, we should have a 16384 byte buddy free.
+
+    //Also note that we actually allocate 16384 - 32 bytes to leave room for the block header
+    //I would do 16384 - 31 since you shouldn't have a block header more than that large, but
+    //then the stack size wouldn't be a power of 2 which isn't allowed.
+
     treturn(true);
 }
 
