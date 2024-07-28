@@ -32,7 +32,7 @@
  * Constants/Defines
  * --------------------------------------------------------------------------------------------- */
 
-#define NUM_TEST_FUNCTIONS 18
+#define NUM_TEST_FUNCTIONS 19
 
 //X macros are magical! :)
 
@@ -43,6 +43,7 @@
     X(sanity,                       STACK_SIZE, 5,      "Basic sanity test",                                            "JZJ") \
     X(beeg_stack,                   16384 - 32, 5,      "Ensures you're using your heap allocator for task stacks",     "JZJ") \
     X(eternalprintf,                STACK_SIZE, 5,      "Group 13's first testcase. No idea why that's the name...",    "JZJ") \
+    X(square_batman_returns,        STACK_SIZE, 5,      "My version of backwards_compatibility() on LEARN",             "JZJ") \
     X(lab2sanity,                   STACK_SIZE, 5,      "Allocates and deallocates some memory!",                       "JZJ") \
     X(free_me_from_my_pain,         STACK_SIZE, 5,      "Attempts to free you from existence with DEADLY pointers!",    "JZJ") \
     X(extfrag,                      STACK_SIZE, 5,      "Tests k_mem_count_extfrag()",                                  "JZJ") \
@@ -155,7 +156,7 @@ static void     spinner(void*);//Spins while osYield()ing until it "topples". Us
 static void     topple_spinners(void);//Waits for spinners to exit
 static task_t   beyblade_let_it_rip(void);//Does anyone remember this show? Kinda just a marketing stunt to sell spinning tops...
 
-static void test4ispain_helper(void*);
+static void square_batman_helper(void*);
 static void mem_ownership_helper(void*);
 static void insanity_helper(void*);
 
@@ -208,6 +209,7 @@ static volatile bool    topple     = false;
 
 //Testcase-specific statics
 static volatile bool    prempt_flag = false;
+static volatile int     square_batman_counters[NUM_SIDEKICKS] = {0, 0, 0, 0, 0};
 static volatile size_t  insanity_counter = 0;
 static volatile void*   mem_ownership_ptr = NULL;
 
@@ -782,6 +784,142 @@ static void eternalprintf(void*) {
     treturn(true);
 }
 
+static void square_batman_helper(void*) {
+    //Printing messes up things since we have premption now
+
+    //Choose a counter for the test
+    int my_counter = 0;
+    for (int ii = 0; ii < NUM_SIDEKICKS; ++ii) {
+        if (square_batman_counters[ii] == 0) {
+            my_counter                  = ii;
+            square_batman_counters[ii]  = 1;
+            break;
+        }
+    }
+    //tprintf("I am Robin #%d!", my_counter);
+
+    //Wait for all Robins to pick their counter
+    while (square_batman_counters[NUM_SIDEKICKS - 1] == 0) {
+        osYield();
+    }
+
+    //Let's see how round these Robins are!
+    for (int ii = 1; ii < 10; ++ii) {
+        /*
+        tprintf(
+            "Incrementing counter %d from %d to %d",
+            my_counter,
+            square_batman_counters[my_counter],
+            square_batman_counters[my_counter] + 1
+        );
+        */
+        ++square_batman_counters[my_counter];
+
+        if ((ii == 5) && (my_counter == EVIL_ROBIN)) {
+            //tprintf("I AM EVIL #%d! I'm going to exit early and throw the other Robins off!", my_counter);
+            osTaskExit();
+        }
+
+        osPeriodYield();//Since we want to allow for the round robin niceness
+        osYield();//And then we want to give Batman a chance to check in on us
+    }
+
+    osTaskExit();
+}
+
+static void square_batman_returns(void*) {//Corresponds to Lab 1 evaluation outline #3 and #4
+    //Since we may be the task with the lowest TID, and our deadline could
+    //be aligned with the robins if we started quickly enough, we should make
+    //ourselves slightly lower priority so that we don't keep winning
+    //the tiebreaking logic.
+    //This is also a good test of osSetDeadline()
+    /*
+    int result = osSetDeadline(6, osGetTID());
+    if (result != RTX_OK) {
+        tprintf("osSetDeadline() failed!");
+        treturn(false);
+    }
+    */
+    //Haha, never mind, I forgot you can't set your own deadline!
+    //Instead, we'll just set the robins' deadlines lower!
+
+    //Setup robins
+    TCB helper_task;
+    memset(&helper_task, 0, sizeof(TCB));
+    helper_task.ptask      = square_batman_helper;
+    helper_task.stack_size = STACK_SIZE;
+
+    for (int ii = 0; ii < NUM_SIDEKICKS; ++ii) {
+        if (osCreateTask(&helper_task) != RTX_OK) {//Should have a deadline of 5
+            tprintf("we live in a society...");
+            treturn(false);
+        }
+
+        if (osSetDeadline(4, helper_task.tid) != RTX_OK) {
+            tprintf("osSetDeadline() failed!");
+            treturn(false);
+        }
+    }
+
+    //Wait for all Robins to pick their counter (we should get preempted)
+    while (square_batman_counters[NUM_SIDEKICKS - 1] == 0) {}
+
+    //Again, things are timing-sensitive, no printing (yet)...
+    //tprintf("I'M BATMAN!");
+
+    //The entire round robin test is complete when all counters are 10
+    bool all_counters_are_10 = false;
+    while (!all_counters_are_10) {
+        all_counters_are_10 = true;
+
+        //We should make it through this loop quick enough that we avoid tearing
+        int minimum = 11;
+        int maximum = 0;
+        for (int ii = 0; ii < NUM_SIDEKICKS; ++ii) {
+            if (ii == EVIL_ROBIN) {//Ignore the evil Robin
+                continue;
+            }
+
+            if (square_batman_counters[ii] != 10) {
+                all_counters_are_10 = false;
+            }
+
+            if (square_batman_counters[ii] < minimum) {
+                minimum = square_batman_counters[ii];
+            }
+
+            if (square_batman_counters[ii] > maximum) {
+                maximum = square_batman_counters[ii];
+            }
+        }
+
+        int difference = maximum - minimum;
+        if (difference > 1) {
+            osYield();
+            osYield();
+            osYield();
+            tprintf("Your Robins aren't round enough!");
+            tprintf("The difference between the highest and lowest Robin counter is %d", difference);
+            for (int ii = 0; ii < NUM_SIDEKICKS; ++ii) {
+                tprintf("    Robin #%d: %d", ii, square_batman_counters[ii]);
+            }
+            treturn(false);
+        }
+
+        osYield();
+    }
+
+    //Success! Yield a few times just to ensure the Robins exit
+    osYield();
+    osYield();
+    osYield();
+
+    //We'll print here instead :)
+    tprintf("I'M BATMAN!");
+    tprintf("Your Robins are perfectly round!");
+    treturn(true);
+}
+
 static void lab2sanity(void*) {
     volatile uint32_t* ptr = k_mem_alloc(sizeof(uint32_t));
     if (ptr == NULL) {
@@ -1113,8 +1251,8 @@ static void kachow(void*) {
     uint32_t your_average_time = your_total_cycles / (KACHOW_ITERATIONS * 5);
     tprintf("Your malloc/free takes %lu cycles to allocate and deallocate on average", your_average_time);
 
-    tprintf("You passed if you're at least a quarter as fast as the system malloc/free!");
-    treturn(your_average_time <= (average_reference_malloc_time * 4));
+    tprintf("There is no malloc/dealloc perf requirement in Lab 3, so you will always pass this");
+    treturn(true);
 }
 
 static void insanity2(void*) {
