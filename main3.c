@@ -32,7 +32,7 @@
  * Constants/Defines
  * --------------------------------------------------------------------------------------------- */
 
-#define NUM_TEST_FUNCTIONS 20
+#define NUM_TEST_FUNCTIONS 22
 
 //X macros are magical! :)
 
@@ -42,6 +42,8 @@
     X(prempt,                       STACK_SIZE, 5,      "Can you prempt tasks?",                                        "JZJ") \
     X(sanity,                       STACK_SIZE, 5,      "Basic sanity test",                                            "JZJ") \
     X(lab3_bad_inputs,              STACK_SIZE, 5,      "No! Bad!",                                                     "JZJ") \
+    X(set_deadline_prempt,          STACK_SIZE, 5,      "Will osSetDeadline() prempt tasks?",                           "JZJ") \
+    X(new_task_deadline_prempt,     STACK_SIZE, 5,      "Will osCreateDeadlineTask() prempt tasks?",                    "JZJ") \
     X(beeg_stack,                   16384 - 32, 5,      "Ensures you're using your heap allocator for task stacks",     "JZJ") \
     X(eternalprintf,                STACK_SIZE, 5,      "Group 13's first testcase. No idea why that's the name...",    "JZJ") \
     X(square_batman_returns,        STACK_SIZE, 5,      "My version of backwards_compatibility() on LEARN",             "JZJ") \
@@ -58,7 +60,7 @@
     X(mem_ownership,                STACK_SIZE, 5,      "Ensures you can't free memory you don't own",                  "JZJ") \
     X(insanity,                     0x400,      5,      "This is a tough one, but you can do it!",                      "JZJ") \
     X(kachow,                       0x400,      5,      "Gotta go fast! Wait no that's a different franchise.",         "JZJ") \
-    X(greedy,                       STACK_SIZE, 5,      "Stack exaustion test. No longer needs to come last!",          "JZJ")
+    X(greedy,                       STACK_SIZE, 5,      "Stack exaustion test. Must still come last actually",          "JZJ")
 
 //TODO fix these two for Lab 3
 //X(insanity2,                    0x400,      "Your heap will weep!",                                         "JZJ") \
@@ -408,7 +410,8 @@ int main(void) {
 
     //Privileged test #17
     if (k_mem_init() != RTX_OK) {//FIXME what about testing if k_mem_init() works if called from a user task?
-        rprintf("    k_mem_init() failed!");
+        yprintf("    k_mem_init() failed (which might be okay if you called it yourself in osKernelInit())");
+        ++num_passed;
     } else {
         gprintf("    k_mem_init() was successful!");
         ++num_passed;
@@ -866,6 +869,70 @@ static void lab3_bad_inputs(void*) {
     osSleep(-123);  //This also shouldn't break things (probably just do nothing in this case)
 
     treturn(true);
+}
+
+static void set_deadline_prempt(void*) {
+    static volatile bool is_second_task              = false;
+    static volatile bool flag_second_task_should_set = false;
+
+    if (is_second_task) {
+        flag_second_task_should_set = true;
+        osTaskExit();
+    } else {
+        is_second_task = true;
+        TCB second_task;
+        memset(&second_task, 0, sizeof(TCB));
+        second_task.ptask       = set_deadline_prempt;
+        second_task.stack_size  = STACK_SIZE;
+        if (osCreateDeadlineTask(100, &second_task) != RTX_OK) {//Shouldn't preempt
+            tprintf("Failed to create the second task!");
+            treturn(false);
+        }
+
+        if (flag_second_task_should_set) {
+            tprintf("Why did the second task already run?");
+            treturn(false);
+        }
+
+        if (osSetDeadline(1, second_task.tid) != RTX_OK) {//Should preempt
+            tprintf("Failed to set the second task's deadline!");
+            treturn(false);
+        }
+
+        if (!flag_second_task_should_set) {
+            tprintf("The second task didn't run first!");
+            treturn(false);
+        }
+
+        treturn(true);
+    }
+}
+
+static void new_task_deadline_prempt(void*) {
+    static volatile bool is_second_task              = false;
+    static volatile bool flag_second_task_should_set = false;
+
+    if (is_second_task) {
+        flag_second_task_should_set = true;
+        osTaskExit();
+    } else {
+        is_second_task = true;
+        TCB second_task;
+        memset(&second_task, 0, sizeof(TCB));
+        second_task.ptask       = new_task_deadline_prempt;
+        second_task.stack_size  = STACK_SIZE;
+        if (osCreateDeadlineTask(1, &second_task) != RTX_OK) {//Should preempt
+            tprintf("Failed to create the second task!");
+            treturn(false);
+        }
+
+        if (!flag_second_task_should_set) {
+            tprintf("The second task didn't run first!");
+            treturn(false);
+        }
+
+        treturn(true);
+    }
 }
 
 static void beeg_stack(void*) {
