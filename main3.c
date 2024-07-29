@@ -32,7 +32,7 @@
  * Constants/Defines
  * --------------------------------------------------------------------------------------------- */
 
-#define NUM_TEST_FUNCTIONS 19
+#define NUM_TEST_FUNCTIONS 20
 
 //X macros are magical! :)
 
@@ -41,6 +41,7 @@
 #define TEST_FUNCTIONS \
     X(prempt,                       STACK_SIZE, 5,      "Can you prempt tasks?",                                        "JZJ") \
     X(sanity,                       STACK_SIZE, 5,      "Basic sanity test",                                            "JZJ") \
+    X(lab3_bad_inputs,              STACK_SIZE, 5,      "No! Bad!",                                                     "JZJ") \
     X(beeg_stack,                   16384 - 32, 5,      "Ensures you're using your heap allocator for task stacks",     "JZJ") \
     X(eternalprintf,                STACK_SIZE, 5,      "Group 13's first testcase. No idea why that's the name...",    "JZJ") \
     X(square_batman_returns,        STACK_SIZE, 5,      "My version of backwards_compatibility() on LEARN",             "JZJ") \
@@ -70,7 +71,7 @@
 //Bonus tests (not required to support these)!
 //X(task_wrapper_test,            STACK_SIZE,     "What happens if a task's function returns?",                   "JZJ")
 
-#define NUM_PRIVILEGED_TESTS 23
+#define NUM_PRIVILEGED_TESTS 25
 
 //The largest block header size we'd ever expect for a group's code
 #define MAX_BLOCK_HEADER_SIZE 16
@@ -529,6 +530,16 @@ int main(void) {
         ++num_passed;
     }
 
+    //Privileged test #24
+    osSleep(1000);//osSleep() in privileged mode should do nothing (I'd assume)
+    gprintf("    osSleep() in privileged mode did nothing as expected!");
+    ++num_passed;
+
+    //Privileged test #25
+    osPeriodYield();//osPeriodYield() in privileged mode should do nothing (I'd assume)
+    gprintf("    osPeriodYield() in privileged mode did nothing as expected!");
+    ++num_passed;
+
     //And off we go!
     wprintf("Okay, I'm calling osKernelStart() now. This is a big step, don't get disheartened");
     wprintf("if it doesn't work on your first try, it certainly didn't for our group :)");
@@ -756,6 +767,104 @@ static void prempt(void*) {
 
 static void sanity(void*) {
     //Do nothing!
+    treturn(true);
+}
+
+static void lab3_bad_inputs(void*) {
+    //Tests for osSetDeadline()
+    if (osSetDeadline(5, osGetTID()) == RTX_OK) {
+        tprintf("You shouldn't be able to set your own deadline!");
+        treturn(false);
+    }
+
+    if (osSetDeadline(5, TID_NULL) == RTX_OK) {
+        tprintf("You shouldn't be able to set the NULL task's deadline!");
+        treturn(false);
+    }
+
+    if (osSetDeadline(5, 16) == RTX_OK) {
+        tprintf("16 is an invalid TID!");
+        treturn(false);
+    }
+
+    if (osSetDeadline(5, 3000) == RTX_OK) {
+        tprintf("3000 is an invalid TID!");
+        treturn(false);
+    }
+
+    task_t another_task = beyblade_let_it_rip();
+    if (another_task == TID_NULL) {
+        tprintf("Failed to create a task for testing!");
+        treturn(false);
+    }
+
+    if (osSetDeadline(0, another_task) == RTX_OK) {
+        tprintf("0 is an invalid deadline!");
+        topple_spinners();
+        treturn(false);
+    }
+
+    if (osSetDeadline(-27, another_task) == RTX_OK) {
+        tprintf("Negative deadlines are invalid!");
+        topple_spinners();
+        treturn(false);
+    }
+
+    topple_spinners();
+
+    //Tests for osCreateDeadlineTask()
+    if (osCreateDeadlineTask(5, NULL) == RTX_OK) {
+        tprintf("You shouldn't be able to create a task with a NULL TCB!");
+        treturn(false);
+    }
+
+    TCB task_that_shouldnt_be_successfully_created;
+    memset(&task_that_shouldnt_be_successfully_created, 0, sizeof(TCB));
+    task_that_shouldnt_be_successfully_created.ptask      = sanity;
+    task_that_shouldnt_be_successfully_created.stack_size = STACK_SIZE;
+
+    if (osCreateDeadlineTask(0, &task_that_shouldnt_be_successfully_created) == RTX_OK) {
+        tprintf("You shouldn't be able to create a task with a deadline of 0!");
+        treturn(false);
+    }
+
+    if (osCreateDeadlineTask(-1234, &task_that_shouldnt_be_successfully_created) == RTX_OK) {
+        tprintf("You shouldn't be able to create a task with a negative deadline!");
+        treturn(false);
+    }
+
+    task_that_shouldnt_be_successfully_created.ptask = NULL;
+    if (osCreateDeadlineTask(5, &task_that_shouldnt_be_successfully_created) == RTX_OK) {
+        tprintf("You shouldn't be able to create a task with a NULL ptask!");
+        treturn(false);
+    }
+
+    task_that_shouldnt_be_successfully_created.ptask      = sanity;
+    task_that_shouldnt_be_successfully_created.stack_size = STACK_SIZE - 1;
+    if (osCreateDeadlineTask(5, &task_that_shouldnt_be_successfully_created) == RTX_OK) {
+        tprintf("You shouldn't be able to create a task with a stack size that's too small!");
+        treturn(false);
+    }
+
+    //Convenient place for another unrelated test of osSetDeadline()
+    TCB technically_this_isnt_invalid_input_but_just_another_osCreateDeadlineTask_test;
+    memset(&technically_this_isnt_invalid_input_but_just_another_osCreateDeadlineTask_test, 0, sizeof(TCB));
+    technically_this_isnt_invalid_input_but_just_another_osCreateDeadlineTask_test.ptask      = sanity;
+    technically_this_isnt_invalid_input_but_just_another_osCreateDeadlineTask_test.stack_size = STACK_SIZE;
+    if (osCreateDeadlineTask(1, &technically_this_isnt_invalid_input_but_just_another_osCreateDeadlineTask_test) != RTX_OK) {
+        tprintf("You should be able to create a task with valid input!");
+        treturn(false);
+    }
+    if (technically_this_isnt_invalid_input_but_just_another_osCreateDeadlineTask_test.tid == 0) {
+        tprintf("You should set the TID when creating a task!");
+        treturn(false);
+    }
+    osPeriodYield();//So that the task can run and exit
+
+    //osSleep() tests
+    osSleep(0);     //This shouldn't break the kernel (probably just do nothing in this case)
+    osSleep(-123);  //This also shouldn't break things (probably just do nothing in this case)
+
     treturn(true);
 }
 
