@@ -32,7 +32,7 @@
  * Constants/Defines
  * --------------------------------------------------------------------------------------------- */
 
-#define NUM_TEST_FUNCTIONS 22
+#define NUM_TEST_FUNCTIONS 23
 
 //X macros are magical! :)
 
@@ -54,6 +54,7 @@
     X(stack_reuse,                  STACK_SIZE, 5,      "Basic stack reuse test",                                       "JZJ") \
     X(odds_are_stacked_against_you, STACK_SIZE, 5,      "Stack integrity test across osYield()",                        "JZJ") \
     X(i_prefer_latches,             STACK_SIZE, 5,      "Register integrity test across osYield()",                     "JZJ") \
+    X(stack_ownership,              STACK_SIZE, 5,      "Ensure's you can't free another task's stack",                 "JZJ") \
     X(tid_limits,                   STACK_SIZE, 5,      "Maximum number of TIDs test",                                  "JZJ") \
     X(tid_uniqueness,               STACK_SIZE, 5,      "Ensure the same TID isn't used for two tasks",                 "JZJ") \
     X(reincarnation,                STACK_SIZE, 5,      "A task whose last act is to recreate itself",                  "JZJ") \
@@ -1698,6 +1699,48 @@ static void i_prefer_latches(void*) {//Corresponds to Lab 1 evaluation outline #
     passed = passed && (r11 == 0xBBBBBBBB);
 
     treturn(passed);
+}
+
+static void stack_ownership(void*) {
+    task_t another_task = beyblade_let_it_rip();
+    if (another_task == TID_NULL) {
+        tprintf("Failed to create another task!");
+        treturn(false);
+    }
+
+    TCB another_task_info;
+    memset(&another_task_info, 0, sizeof(TCB));
+    if (osTaskInfo(another_task, &another_task_info) != RTX_OK) {
+        tprintf("Failed to get information about the other task!");
+        topple_spinners();
+        treturn(false);
+    }
+
+    if (another_task_info.stack_high == NULL) {
+        tprintf("The other task's stack_high was not populated!");
+        topple_spinners();
+        treturn(false);
+    }
+
+    if (another_task_info.stack_size == 0) {
+        tprintf("The other task's stack_size was not populated!");
+        topple_spinners();
+        treturn(false);
+    }
+
+    void* start_of_heap_allocation = (void*)(another_task_info.stack_high - ((uint32_t)another_task_info.stack_size));
+
+    //This should fail since, according to the spec, tasks own their own stacks
+    if (k_mem_dealloc(start_of_heap_allocation) != RTX_ERR) {
+        tprintf("k_mem_dealloc() should not allow deallocating another task's stack!");
+        tprintf("Things are probably going to crash now, sorry...");
+        topple_spinners();
+        treturn(false);
+    }
+
+    tprintf("Very noice :)");
+    topple_spinners();
+    treturn(true);
 }
 
 static void tid_limits(void*) {//Corresponds to Lab 1 evaluation outline #7 and 8
